@@ -8,6 +8,11 @@ from .. import utils
 from .. import dataset
 from .utils import make_flatmap_image
 from . import composite
+from cortex.dataset.view2D import Vertex2D, Volume2D
+from cortex.dataset.viewRGB import VertexRGB, VolumeRGB
+from cortex.dataset.views import Volume
+from matplotlib.figure import Figure
+from typing import Tuple, Union
 
 
 default_colorbar_locations = {
@@ -17,7 +22,7 @@ default_colorbar_locations = {
 }
 
 
-def _check_colorbar_location(colorbar_location):
+def _check_colorbar_location(colorbar_location: Union[Tuple[int, float, float, float], str]) -> Union[Tuple[float, float, float, float], Tuple[int, float, float, float]]:
     if isinstance(colorbar_location, (tuple, list)):
         return colorbar_location
 
@@ -28,16 +33,16 @@ def _check_colorbar_location(colorbar_location):
     return default_colorbar_locations[colorbar_location]
 
 
-def make_figure(braindata, recache=False, pixelwise=True, thick=32, sampler='nearest',
-                height=1024, dpi=100, depth=0.5, with_rois=True, with_sulci=False,
-                with_labels=True, with_colorbar=True, with_borders=False,
-                with_dropout=False, with_curvature=False, extra_disp=None,
-                with_connected_vertices=False, overlay_file=None,
-                linewidth=None, linecolor=None, roifill=None, shadow=None,
-                labelsize=None, labelcolor=None, cutout=None, curvature_brightness=None,
-                curvature_contrast=None, curvature_threshold=None, fig=None, extra_hatch=None,
-                colorbar_ticks=None, colorbar_location='center', roi_list=None, sulci_list=None,
-                nanmean=False):
+def make_figure(braindata: Union[VolumeRGB, Volume, VertexRGB, Vertex2D, Volume2D], recache: bool=False, pixelwise: bool=True, thick: int=32, sampler: str='nearest',
+                height: int=1024, dpi: int=100, depth: float=0.5, with_rois: bool=True, with_sulci: bool=False,
+                with_labels: bool=True, with_colorbar: bool=True, with_borders: bool=False,
+                with_dropout: bool=False, with_curvature: bool=False, extra_disp: None=None,
+                with_connected_vertices: bool=False, overlay_file: None=None,
+                linewidth: None=None, linecolor: None=None, roifill: None=None, shadow: None=None,
+                labelsize: None=None, labelcolor: None=None, cutout: None=None, curvature_brightness: None=None,
+                curvature_contrast: None=None, curvature_threshold: None=None, fig: None=None, extra_hatch: None=None,
+                colorbar_ticks: None=None, colorbar_location: Union[Tuple[int, float, float, float], str]='center', roi_list: None=None, sulci_list: None=None,
+                nanmean: bool=False, **kwargs) -> Figure:
     """Show a Volume or Vertex on a flatmap with matplotlib.
 
     Parameters
@@ -232,8 +237,8 @@ def make_figure(braindata, recache=False, pixelwise=True, thick=32, sampler='nea
 
     return fig
 
-def make_png(fname, braindata, recache=False, pixelwise=True, sampler='nearest', height=1024,
-             bgcolor=None, dpi=100, **kwargs):
+def make_png(fname: str, braindata: Volume, recache: bool=False, pixelwise: bool=True, sampler: str='nearest', height: int=1024,
+             bgcolor: None=None, dpi: int=100, **kwargs) -> None:
     """Create a PNG of the VertexData or VolumeData on a flatmap.
 
     Parameters
