@@ -215,7 +215,7 @@ class Dataset(object):
 
         return Dataset(**ds)
 
-def normalize(data: Union[Dataview, Dataset, dict, str, tuple]):
+def normalize(data: Union[Dataview, Dataset, dict, str, tuple]) -> Union[Dataview, Dataset]:
     if isinstance(data, (Dataset, Dataview)):
         return data
     elif isinstance(data, dict):
