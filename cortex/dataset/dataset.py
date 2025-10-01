@@ -1,4 +1,5 @@
 import tempfile
+from typing import Union
 import numpy as np
 import h5py
 
@@ -214,7 +215,7 @@ class Dataset(object):
 
         return Dataset(**ds)
 
-def normalize(data):
+def normalize(data: Union[Dataview, Dataset, dict, str, tuple]):
     if isinstance(data, (Dataset, Dataview)):
         return data
     elif isinstance(data, dict):

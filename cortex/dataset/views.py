@@ -3,6 +3,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+from typing import Union
 
 import h5py
 import numpy as np
@@ -21,7 +22,7 @@ except ImportError:
     from matplotlib.cm import register_cmap
 
 
-def normalize(data):
+def normalize(data: Union[Dataview, tuple]):
     if isinstance(data, tuple):
         if len(data) == 3:
             if data[0].dtype == np.uint8:
