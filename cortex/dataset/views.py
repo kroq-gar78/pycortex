@@ -3,10 +3,11 @@ from __future__ import annotations
 import glob
 import json
 import os
-from typing import Union, overload
+from typing import Optional, Union, overload
 
 import h5py
 import numpy as np
+import numpy.typing as npt
 
 from .. import options
 from .braindata import VertexData, VolumeData
@@ -105,7 +106,7 @@ def _from_hdf_view(h5, data, xfmname=None, vmin=None, vmax=None,  subject=None, 
         raise ValueError("Invalid Dataview specification")
 
 class Dataview(object):
-    def __init__(self, cmap=None, vmin=None, vmax=None, description="", state=None, **kwargs):
+    def __init__(self, cmap: Optional[str]=None, vmin: Optional[float]=None, vmax: Optional[float]=None, description: str="", state=None, **kwargs):
         if self.__class__ == Dataview:
             raise TypeError('Cannot directly instantiate Dataview objects')
 
@@ -297,8 +298,8 @@ class Volume(VolumeData, Dataview):
         All additional arguments in kwargs are passed to the VolumeData and Dataview
 
     """
-    def __init__(self, data, subject, xfmname, mask=None, 
-                 cmap=None, vmin=None, vmax=None, description="", **kwargs):
+    def __init__(self, data: npt.NDArray, subject: str, xfmname: str, mask: Optional[npt.NDArray]=None,
+                 cmap: Optional[str]=None, vmin: Optional[float]=None, vmax: Optional[float]=None, description: str="", **kwargs):
         super(Volume, self).__init__(data, subject, xfmname, mask=mask, 
                                      cmap=cmap, vmin=vmin, vmax=vmax,
                                      description=description, **kwargs)
@@ -351,7 +352,7 @@ class Vertex(VertexData, Dataview):
         All additional arguments in kwargs are passed to the VolumeData and Dataview
 
     """
-    def __init__(self, data, subject, cmap=None, vmin=None, vmax=None, description="", **kwargs):
+    def __init__(self, data: npt.NDArray, subject: str, cmap: Optional[str]=None, vmin: Optional[float]=None, vmax: Optional[float]=None, description: str="", **kwargs):
         super(Vertex, self).__init__(data, subject, cmap=cmap, vmin=vmin, vmax=vmax, 
                                      description=description, **kwargs)
         # set vmin and vmax

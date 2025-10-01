@@ -1,8 +1,10 @@
 import hashlib
 from copy import deepcopy
+from typing import Optional, Union, cast
 
 import h5py
 import numpy as np
+import numpy.typing as npt
 
 from ..database import db
 
@@ -19,11 +21,11 @@ class BrainData(object):
     subject : str
         Subject identifier. Must exist in the pycortex database.
     """
-    def __init__(self, data, subject, **kwargs):
+    def __init__(self, data: Union[npt.NDArray, str], subject: str, **kwargs):
         if isinstance(data, str):
             import nibabel
             nib = nibabel.load(data)
-            data = nib.get_fdata().T
+            data = cast(npt.NDArray, nib.get_fdata().T)
         self._data = data
         try:
             basestring
@@ -133,7 +135,7 @@ class VolumeData(BrainData):
     **kwargs
         Other keyword arguments are passed to superclass inits.
     """
-    def __init__(self, data, subject, xfmname, mask=None, **kwargs):
+    def __init__(self, data: npt.NDArray, subject: str, xfmname: str, mask: Optional[npt.NDArray]=None, **kwargs):
         if self.__class__ == VolumeData:
             raise TypeError('Cannot directly instantiate VolumeData objects')
         super(VolumeData, self).__init__(data, subject, **kwargs)
@@ -593,7 +595,7 @@ class VertexData(BrainData):
         return blended
 
 
-def _find_mask(nvox, subject, xfmname):
+def _find_mask(nvox: int, subject: str, xfmname: str):
     import glob
     import os
     import re
@@ -602,7 +604,7 @@ def _find_mask(nvox, subject, xfmname):
     files = db.get_paths(subject)['masks'].format(xfmname=xfmname, type="*")
     for fname in glob.glob(files):
         nib = nibabel.load(fname)
-        mask = nib.get_fdata().T != 0
+        mask: npt.NDArray[np.integer] = nib.get_fdata().T != 0
         if nvox == np.sum(mask):
             fname = os.path.split(fname)[1]
             name = re.compile(r'mask_(.+).nii.gz').search(fname)
