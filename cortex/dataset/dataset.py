@@ -16,15 +16,16 @@ class Dataset(object):
     explicitly--for example, if a dictionary of data objects is passed to 
     `cortex.webshow`, it will automatically be converted into a `Dataset`.
 
+    # TODO: should be BrainData & Dataview, or just Dataview
     All kwargs should be `BrainData` or `Dataset` objects.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Union[Dataview, "Dataset"]):
         self.h5 = None
-        self.views = {}
+        self.views: dict[str, Dataview] = {}
 
         self.append(**kwargs)
 
-    def append(self, **kwargs):
+    def append(self, **kwargs: Union[Dataview, "Dataset"]) -> "Dataset":
         """Add the `BrainData` or `Dataset` objects in `kwargs` into this 
         dataset.
         """
@@ -224,7 +225,7 @@ def normalize(data: Union[Dataset, dict, str]) -> Dataset: ...
 @overload
 def normalize(data: tuple) -> Union[Vertex, Volume]: ...
 
-def normalize(data: Union[Dataview, Dataset, dict, str, tuple]) -> Union[Dataview, Dataset]:
+def normalize(data: Union[Dataset, Dataview, dict, str, tuple]) -> Union[Dataset, Dataview, Vertex, Volume]:
     if isinstance(data, (Dataset, Dataview)):
         return data
     elif isinstance(data, dict):
