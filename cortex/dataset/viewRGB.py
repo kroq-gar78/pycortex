@@ -1,30 +1,35 @@
 from __future__ import annotations
-import numpy as np
 import colorsys
+from typing import Optional, Union
 import warnings
 
+import numpy as np
+import numpy.typing as npt
+
 from .views import Dataview, Volume, Vertex
-from .braindata import VolumeData, VertexData, _hash
+from .braindata import BrainData, VolumeData, VertexData, _hash
 from ..database import db
 
 from .. import options
 default_cmap = options.config.get("basic", "default_cmap")
 
 
+Color = tuple[int, float, float]  # RGB color
 class Colors(object):
     """
     Set of known colors
     """
-    RoseRed = (237, 35, 96)
-    LimeGreen = (141, 198, 63)
-    SkyBlue = (0, 176, 218)
-    DodgerBlue = (30, 144, 255)
-    Red = (255, 000, 000)
-    Green = (000, 255, 000)
-    Blue = (000, 000, 255)
+    # TODO: there's probably a cleaner way to annotate these
+    RoseRed: Color = (237, 35, 96)
+    LimeGreen: Color = (141, 198, 63)
+    SkyBlue: Color = (0, 176, 218)
+    DodgerBlue: Color = (30, 144, 255)
+    Red: Color = (255, 000, 000)
+    Green: Color = (000, 255, 000)
+    Blue: Color = (000, 000, 255)
 
 
-def RGB2HSV(color):
+def RGB2HSV(color: Color | npt.NDArray) -> Color:
     """
     Converts RGB to HS
     Parameters
@@ -43,7 +48,7 @@ def RGB2HSV(color):
     return (int(hue), saturation, value)
 
 
-def HSV2RGB(color):
+def HSV2RGB(color: Color | npt.NDArray) -> Color:
     """
     Converts HSV to RGB
 
@@ -64,6 +69,11 @@ def HSV2RGB(color):
 class DataviewRGB(Dataview):
     """Abstract base class for RGB data views.
     """
+    _cls = BrainData
+    red: Dataview
+    green: Dataview
+    blue: Dataview
+
     def __init__(self, subject=None, alpha=None, description="", state=None, **kwargs):
         self.alpha = alpha
         self.subject = self.red.subject
@@ -190,11 +200,15 @@ class VolumeRGB(DataviewRGB):
 
     """
     _cls = VolumeData
+    red: Volume
+    green: Volume
+    blue: Volume
+    _alpha: Optional[Union[npt.NDArray, Volume]]
 
-    def __init__(self, channel1, channel2, channel3, subject=None, xfmname=None, alpha=None, description="",
-                 state=None, channel1color=Colors.Red, channel2color=Colors.Green, channel3color=Colors.Blue,
-                 max_color_value=None, max_color_saturation=1.0, shared_range=False, shared_vmin=None,
-                 shared_vmax=None, **kwargs):
+    def __init__(self, channel1: Union[npt.NDArray, VolumeData], channel2: Union[npt.NDArray, VolumeData], channel3: Union[npt.NDArray, VolumeData], subject: Optional[str]=None, xfmname: Optional[str]=None, alpha: Optional[Union[npt.NDArray, VolumeData]]=None, description: str="",
+                 state=None, channel1color: Color=Colors.Red, channel2color: Color=Colors.Green, channel3color: Color=Colors.Blue,
+                 max_color_value: Optional[float]=None, max_color_saturation: float=1.0, shared_range: bool=False, shared_vmin: Optional[float]=None,
+                 shared_vmax: Optional[float]=None, **kwargs):
 
         channel1color = tuple(channel1color)
         channel2color = tuple(channel2color)
@@ -228,6 +242,9 @@ class VolumeRGB(DataviewRGB):
         else:
             if subject is None or xfmname is None:
                 raise TypeError("Subject and xfmname are required")
+            if not isinstance(channel2, np.ndarray) or not isinstance(channel3, np.ndarray):
+                raise TypeError("Data channels must be numpy arrays if channel1 is a numpy array")
+
             if (channel1color == Colors.Red) and (channel2color == Colors.Green) and (channel3color == Colors.Blue)\
                     and shared_range is False:
                 # R/G/B basis can be directly passed through
@@ -277,7 +294,7 @@ class VolumeRGB(DataviewRGB):
         return alpha
 
     @alpha.setter
-    def alpha(self, alpha):
+    def alpha(self, alpha: Optional[Union[npt.NDArray, Volume]]):
         self._alpha = alpha
 
     def to_json(self, simple=False):
@@ -509,8 +526,11 @@ class VertexRGB(DataviewRGB):
     """
     _cls = VertexData
     blend_curvature = _cls.blend_curvature  # hacky inheritance
+    red: Vertex
+    green: Vertex
+    blue: Vertex
 
-    def __init__(self, red, green, blue, subject=None, alpha=None, description="",
+    def __init__(self, red: Union[npt.NDArray, VertexData], green: Union[npt.NDArray, VertexData], blue: Union[npt.NDArray, VertexData], subject: Optional[str]=None, alpha: Optional[Union[npt.NDArray, VertexData]]=None, description: str="",
                  state=None, **kwargs):
 
         if isinstance(red, VertexData):
@@ -524,6 +544,9 @@ class VertexRGB(DataviewRGB):
         else:
             if subject is None:
                 raise TypeError("Subject name is required")
+            if not isinstance(green, np.ndarray) or not isinstance(blue, np.ndarray):
+                raise TypeError("Data channels must be numpy arrays if red is a numpy array")
+
             self.red = Vertex(red, subject)
             self.green = Vertex(green, subject)
             self.blue = Vertex(blue, subject)
