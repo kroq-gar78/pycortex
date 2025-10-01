@@ -12,7 +12,7 @@ import warnings
 from looseversion import LooseVersion
 from importlib import import_module
 
-from typing import Any, Callable, Generic, Optional, Type, TypeVar, Literal, TYPE_CHECKING
+from typing import Any, Callable, Generic, Optional, TypeVar, TYPE_CHECKING, cast
 from typing_extensions import ParamSpec
 
 import h5py
@@ -38,34 +38,32 @@ T = TypeVar('T')
 P = ParamSpec('P')
 
 class DocLoader(Generic[P, T]):
-    def __init__(self, func, mod, package, actual_func: Optional[Callable[P, T]]=None):
+    def __init__(self, func, mod, package, actual_func: Optional[Callable[P, T]] = None):
         self._load: Callable[[], Callable[P, T]] = lambda: getattr(import_module(mod, package), func)
+        self._actual_func = actual_func # stored only to resolve generic types during type checking
 
     def __call__(self, *args, **kwargs):
         return self._load()(*args, **kwargs)
 
-    def __getattribute__(self, name):
+    def __getattribute__(self, name: str):
         if name != "_load":
             return getattr(self._load(), name)
         else:
-            return object.__getattribute__(self, name)
+            return cast(T, object.__getattribute__(self, name))
+
+if TYPE_CHECKING:
+    from cortex.mapper import get_mapper as _get_mapper
+else:
+    _get_mapper = None
+get_mapper = DocLoader("get_mapper", ".mapper", "cortex", actual_func=_get_mapper)
+
+#from .mapper.point import PointNN
+#reveal_type(PointNN().sampler)
+#getattr(import_module(".mapper", "cortex"), "get_mapper")
 
 def get_roipack(*args, **kwargs):
     warnings.warn('Please use db.get_overlay instead', DeprecationWarning)
     return db.get_overlay(*args, **kwargs)
-
-if TYPE_CHECKING:
-    from .mapper import get_mapper as _get_mapper
-    from .mapper import Mapper
-    #reveal_type(_get_mapper)
-
-#get_mapper = DocLoader[_get_mapper]("get_mapper", ".mapper", "cortex")
-if TYPE_CHECKING:
-    get_mapper = DocLoader("get_mapper", ".mapper", "cortex", actual_func=_get_mapper)
-    #get_mapper = DocLoader("get_mapper", ".mapper", "cortex")
-    #reveal_type(get_mapper('asdf', 'asdf'))
-else:
-    get_mapper = DocLoader("get_mapper", ".mapper", "cortex")
 
 def get_ctmpack(subject, types=("inflated",), method="raw", level=0, recache=False,
                 decimate=False, external_svg=None,
