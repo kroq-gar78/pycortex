@@ -96,7 +96,7 @@ def plot_panels(
     # create all images
     temp_dir = tempfile.mkdtemp()
     base_name = os.path.join(temp_dir, "fig")
-    filenames = save_3d_views(
+    filenames, handle = save_3d_views(
         volume,
         base_name,
         list_angles=list_angles,

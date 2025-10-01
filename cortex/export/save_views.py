@@ -130,7 +130,7 @@ def save_3d_views(
                     time.sleep(0.1)
                     continue
             break
-        time.sleep(0.1)
+        time.sleep(0.3)
 
         # Save image, store file_name
         file_name = file_pattern.format(base=base_name, view=view_name, surface=surface)
@@ -154,13 +154,14 @@ def save_3d_views(
 
     # Try to close the window
     try:
-        handle.close()
-        handle.server.stop()
+        pass
+        #handle.close()
+        #handle.server.stop()
     except Exception as e:
         print(str(e))
         print("Could not close viewer.")
 
-    return file_names
+    return file_names, handle
 
 
 default_view_params = {
