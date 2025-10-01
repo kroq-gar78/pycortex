@@ -379,9 +379,9 @@ def show(
 
     # populate default webshow args
     if autoclose is None:
-        autoclose = cast(str, options.config.get('webshow', 'autoclose', fallback='true')) == 'true'
+        autoclose = options.config.get('webshow', 'autoclose', fallback='true') == 'true'
     if open_browser is None:
-        open_browser = cast(str, options.config.get('webshow', 'open_browser', fallback='true')) == 'true'
+        open_browser = options.config.get('webshow', 'open_browser', fallback='true') == 'true'
 
     data = dataset.normalize(data)
     if not isinstance(data, dataset.Dataset):
