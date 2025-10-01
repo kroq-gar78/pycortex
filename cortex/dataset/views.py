@@ -9,7 +9,7 @@ import h5py
 import numpy as np
 
 from .. import options
-from .braindata import BrainData, VertexData, VolumeData
+from .braindata import VertexData, VolumeData
 
 default_cmap = options.config.get("basic", "default_cmap")
 

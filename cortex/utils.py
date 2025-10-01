@@ -879,7 +879,7 @@ def get_roi_masks(subject, xfmname, roi_list=None, gm_sampler='cortical', split_
         idx_vol[left_mask] *= -1
         return idx_vol, idx_labels
 
-def get_dropout(subject, xfmname, power=20):
+def get_dropout(subject: str, xfmname: str, power: float = 20):
     """Create a dropout Volume showing where EPI signal
     is very low.
 
