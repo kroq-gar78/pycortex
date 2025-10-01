@@ -287,7 +287,7 @@ def show(
     autoclose: Optional[bool]=None,
     open_browser: Optional[bool]=None,
     port: Optional[int]=None,
-    pickerfun: Optional[Callable[[Any, Any], None]]=None,
+    pickerfun: Optional[Callable[[int, int], None]]=None,
     recache: bool=False,
     template: str="mixer.html",
     overlays_available: Optional[tuple[str]]=None,
