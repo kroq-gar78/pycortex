@@ -90,7 +90,7 @@ def plot_panels(
         (panel["view"]["angle"], panel["view"]["surface"]) for panel in panels
     ]
     # remove redundant couples, e.g. left and right
-    angles_and_surfaces = list(set(angles_and_surfaces))
+    #angles_and_surfaces = list(set(angles_and_surfaces)) # doesn't work with angles specified by dicts
     list_angles, list_surfaces = list(zip(*angles_and_surfaces))
 
     # create all images
