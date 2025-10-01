@@ -3,7 +3,7 @@ from __future__ import annotations
 import glob
 import json
 import os
-from typing import Optional, Union, overload
+from typing import Optional, Union, cast, overload
 
 import h5py
 import numpy as np
@@ -304,10 +304,10 @@ class Volume(VolumeData, Dataview):
                                      cmap=cmap, vmin=vmin, vmax=vmax,
                                      description=description, **kwargs)
         # set vmin and vmax
-        self.vmin = self.vmin if self.vmin is not None else \
-            np.percentile(np.nan_to_num(self.data), 1)
-        self.vmax = self.vmax if self.vmax is not None else \
-            np.percentile(np.nan_to_num(self.data), 99)
+        self.vmin: float = self.vmin if self.vmin is not None else \
+            cast(float, np.percentile(np.nan_to_num(self.data), 1)) # NOTE: should have been fixed in https://github.com/numpy/numpy/pull/27334
+        self.vmax: float = self.vmax if self.vmax is not None else \
+            cast(float, np.percentile(np.nan_to_num(self.data), 99))
 
     def _write_hdf(self, h5, name="data"):
         datanode = VolumeData._write_hdf(self, h5)
@@ -357,9 +357,9 @@ class Vertex(VertexData, Dataview):
                                      description=description, **kwargs)
         # set vmin and vmax
         self.vmin = self.vmin if self.vmin is not None else \
-            np.percentile(np.nan_to_num(self.data), 1)
+            cast(float, np.percentile(np.nan_to_num(self.data), 1))
         self.vmax = self.vmax if self.vmax is not None else \
-            np.percentile(np.nan_to_num(self.data), 99)
+            cast(float, np.percentile(np.nan_to_num(self.data), 99))
 
     def _write_hdf(self, h5, name="data"):
         datanode = VertexData._write_hdf(self, h5)
