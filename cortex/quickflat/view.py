@@ -215,7 +215,7 @@ def make_figure(braindata: dataset.Dataview, recache: bool=False, pixelwise: boo
     if with_colorbar:
         colorbar_location = _check_colorbar_location(colorbar_location)
         # Allow 2D colorbars:
-        if isinstance(dataview, dataset.view2D.Dataview2D):
+        if isinstance(dataview, dataset.Dataview2D):
             colorbar_ticks = np.round([
                     dataview.vmin, dataview.vmax,
                     dataview.vmin2, dataview.vmax2

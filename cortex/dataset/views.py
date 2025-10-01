@@ -418,4 +418,4 @@ def u(s, encoding='utf8'):
 
 
 from .viewRGB import Colors, VertexRGB, VolumeRGB
-from .view2D import Vertex2D, Volume2D
+from .view2D import Vertex2D, Volume2D, Dataview2D
