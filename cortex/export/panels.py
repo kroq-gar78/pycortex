@@ -2,10 +2,13 @@ import os
 import errno
 import shutil
 import tempfile
+from typing import Any, Optional
 
 import numpy as np
+import numpy.typing as npt
 import matplotlib.pyplot as plt
 
+from ..dataset import Volume
 from .save_views import save_3d_views
 from ._default_params import (
     params_inflatedless_lateral_medial_ventral,
@@ -17,15 +20,15 @@ from ._default_params import (
 
 
 def plot_panels(
-    volume,
+    volume: Volume,
     panels,
-    figsize=(16, 9),
-    windowsize=(1600 * 4, 900 * 4),
-    save_name=None,
-    sleep=10,
-    viewer_params=dict(labels_visible=[], overlays_visible=["rois"]),
-    interpolation="nearest",
-    layers=1,
+    figsize: npt.ArrayLike=(16, 9),
+    windowsize: tuple[int, int]=(1600 * 4, 900 * 4),
+    save_name: Optional[str]=None,
+    sleep: float=10,
+    viewer_params: dict[str, Any]=dict(labels_visible=[], overlays_visible=["rois"]),
+    interpolation: str="nearest",
+    layers: int=1,
 ):
     """Plot on the same figure a number of views, as defined by a list of panel
 
