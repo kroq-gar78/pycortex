@@ -13,3 +13,10 @@ skip = '.git,*.pdf,*.svg,*.css,*.min.*,*.gii,resources,OpenCTM-1.0.3,filestore,b
 check-hidden = true
 # ignore-regex = ''
 ignore-words-list = 'nd,acount,anormal,fpt,coo,transpart,FO,lins'
+
+[dependency-groups]
+# TODO: remove before PR
+dev = [
+    "ipython>=8.37.0",
+    "pyright[nodejs]>=1.1.405",
+]
