@@ -1,22 +1,32 @@
 import os
 import time
+from typing import Any, TypedDict
 
 import cortex
 
 file_pattern = "{base}_{view}_{surface}.png"
 
+ViewParams = TypedDict('ViewParams', {
+    "camera.azimuth": float,
+    "camera.altitude": float,
+    "camera.target": list[float],
+    "surface.{subject}.unfold": float,
+    "surface.{subject}.pivot": float,
+    "surface.{subject}.shift": float,
+    "surface.{subject}.specularity": float,
+}, total=False)
 
 def save_3d_views(
-    volume,
-    base_name="fig",
-    list_angles=["lateral_pivot"],
-    list_surfaces=["inflated"],
-    viewer_params=dict(labels_visible=[], overlays_visible=["rois"]),
-    interpolation="nearest",
-    layers=1,
-    size=(1024 * 4, 768 * 4),
-    trim=True,
-    sleep=10,
+    volume: cortex.Volume | cortex.Vertex,
+    base_name: str="fig",
+    list_angles: list[str | tuple[str, ViewParams]]=["lateral_pivot"],
+    list_surfaces: list[str | ViewParams]=["inflated"],
+    viewer_params: dict[str, Any]=dict(labels_visible=[], overlays_visible=["rois"]),
+    interpolation: str="nearest",
+    layers: int=1,
+    size: tuple[int, int]=(1024 * 4, 768 * 4),
+    trim: bool=True,
+    sleep: float=10,
 ):
     """Saves 3D views of `volume` under multiple specifications.
 
@@ -99,6 +109,7 @@ def save_3d_views(
             view_name = view
         else:
             view_name, view_params = view
+
         if isinstance(surface, str):
             surface_params = unfold_view_params[surface].copy()
             # Fix unfold parameters if this subject doesn't have a flatmap
@@ -162,8 +173,7 @@ def save_3d_views(
 
     return file_names
 
-
-default_view_params = {
+default_view_params: ViewParams = {
     "camera.azimuth": 45,
     "camera.altitude": 75,
     "camera.target": [0, 0, 0],
@@ -173,7 +183,7 @@ default_view_params = {
     "surface.{subject}.specularity": 0,
 }
 
-angle_view_params = {
+angle_view_params: dict[str, ViewParams] = {
     "left": {"camera.azimuth": 90, "camera.altitude": 90,},
     "right": {"camera.azimuth": 270, "camera.altitude": 90,},
     "left_atl": {"camera.azimuth": 65, "camera.altitude": 100,},
@@ -216,7 +226,7 @@ angle_view_params = {
     },
 }
 
-unfold_view_params = {
+unfold_view_params: dict[str, ViewParams] = {
     "fiducial": {"surface.{subject}.unfold": 0,},
     "inflated_less": {"surface.{subject}.unfold": 0.25,},
     "inflated": {"surface.{subject}.unfold": 0.5,},
