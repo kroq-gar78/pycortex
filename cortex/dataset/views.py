@@ -3,7 +3,7 @@ from __future__ import annotations
 import glob
 import json
 import os
-from typing import Union
+from typing import Union, overload
 
 import h5py
 import numpy as np
@@ -21,8 +21,13 @@ try:
 except ImportError:
     from matplotlib.cm import register_cmap
 
+@overload
+def normalize(data: tuple) -> Union[Volume, Vertex]: ...
 
-def normalize(data: Union[Dataview, tuple]):
+@overload
+def normalize(data: Dataview) -> Dataview: ...
+
+def normalize(data: Union[Dataview, tuple]) -> Union[Volume, Vertex, Dataview]:
     if isinstance(data, tuple):
         if len(data) == 3:
             if data[0].dtype == np.uint8:

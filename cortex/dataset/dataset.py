@@ -1,5 +1,5 @@
 import tempfile
-from typing import Union
+from typing import Union, overload
 import numpy as np
 import h5py
 
@@ -8,7 +8,7 @@ from ..xfm import Transform
 
 from .braindata import _hdf_write
 from .views import normalize as _vnorm
-from .views import Dataview, Volume, _from_hdf_data
+from .views import Dataview, Vertex, Volume, _from_hdf_data
 
 class Dataset(object):
     """
@@ -214,6 +214,15 @@ class Dataset(object):
             ds[prefix+name] = data
 
         return Dataset(**ds)
+
+@overload
+def normalize(data: Dataview) -> Dataview: ...
+
+@overload
+def normalize(data: Union[Dataset, dict, str]) -> Dataset: ...
+
+@overload
+def normalize(data: tuple) -> Union[Vertex, Volume]: ...
 
 def normalize(data: Union[Dataview, Dataset, dict, str, tuple]) -> Union[Dataview, Dataset]:
     if isinstance(data, (Dataset, Dataview)):
