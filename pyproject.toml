@@ -4,6 +4,10 @@
 requires = ["setuptools>=64", "setuptools-scm>=8", "build", "numpy", "cython", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "pycortex"
+dynamic = ["authors", "license", "readme", "version", "classifiers", "dependencies"]
+
 [tool.setuptools_scm]
 version_file = "cortex/_version.py"
 local_scheme = "no-local-version"
