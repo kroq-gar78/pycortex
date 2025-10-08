@@ -13,7 +13,11 @@ from looseversion import LooseVersion
 from importlib import import_module
 
 from typing import Any, Callable, Generic, Optional, TypeVar, TYPE_CHECKING, cast
-from typing_extensions import ParamSpec
+import sys
+if sys.version_info < (3, 10):
+    from typing_extensions import ParamSpec
+else:
+    from typing import ParamSpec
 
 import h5py
 import numpy as np
