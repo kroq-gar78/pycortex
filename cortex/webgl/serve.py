@@ -4,9 +4,10 @@ import time
 import json
 import stat
 import email
-try:  # python 2
+import sys
+if sys.version_info < (3,):
     from Queue import Queue
-except ImportError:  # python 3
+else:
     from queue import Queue
 import struct
 import socket
