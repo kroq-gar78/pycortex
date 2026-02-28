@@ -573,6 +573,7 @@ class VertexData(BrainData):
             The original map blended with a curvature map.
         """
         from .views import Vertex
+        from .viewRGB import VertexRGB
         # prepare curvature map
         curvature = db.get_surfinfo(self.subject, smooth=smooth).data
         curvature = (curvature > threshold).astype("float")
@@ -584,7 +585,8 @@ class VertexData(BrainData):
         alpha = np.clip(alpha.astype("float"), 0, 1)
 
         # blend original map with curvature map
-        blended = deepcopy(self.raw)  # copy because VertexRGB.raw returns self
+        # self.raw comes from the implementation of Dataview (e.g. Vertex, Volume, etc.)
+        blended = cast(VertexRGB, deepcopy(self.raw))  # copy because VertexRGB.raw returns self
         blended.red.data = blended.red.data * alpha + (1 - alpha) * curvature_raw.red.data
         blended.green.data = blended.green.data * alpha + (1 - alpha) * curvature_raw.green.data
         blended.blue.data = blended.blue.data * alpha + (1 - alpha) * curvature_raw.blue.data
