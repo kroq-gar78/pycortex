@@ -227,7 +227,7 @@ def test_blend_curvature():
     alpha = np.linspace(0, 1, view.data.size).reshape(view.data.shape)
 
     # test alpha with float
-    view_rgb = view.blend_curvature(alpha)
+    view_rgb: cortex.VertexRGB = view.blend_curvature(alpha)
     # test alpha with bool
     view_rgb = view.blend_curvature(alpha > 0.3)
     # test that it returns a VertexRGB
