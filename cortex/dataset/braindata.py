@@ -1,6 +1,11 @@
 import hashlib
 from copy import deepcopy
-from typing import Optional, Union, cast, Self
+import sys
+from typing import Optional, Union, cast
+if sys.version_info < (3, 10):
+    from typing_extensions import Self
+else:
+    from typing import Self
 
 import h5py
 import numpy as np
@@ -281,7 +286,7 @@ class VolumeData(BrainData):
         maskstr = maskstr[0].upper()+maskstr[1:]
         return "<%s data for (%s, %s)>"%(maskstr, self.subject, self.xfmname)
 
-    def copy(self, data) -> Self:
+    def copy(self, data):
         return super(VolumeData, self).copy(data, self.subject, self.xfmname, mask=self._mask)
 
     @property
