@@ -236,6 +236,7 @@ class Dataview(object):
             # Register colormap to matplotlib to avoid loading it again
             register_cmap(cmap)
 
+        # TODO: create namedtuple
         return dict(cmap=cmap, vmin=self.vmin, vmax=self.vmax)
 
     @property
@@ -246,6 +247,7 @@ class Dataview(object):
         # Normalize colors according to vmin, vmax
         norm = colors.Normalize(self.vmin, self.vmax) 
         cmapper = cm.ScalarMappable(norm=norm, cmap=cmap)
+        # TODO: self.data relies on BrainData. Would need common inheritance for this to work.
         color_data = cmapper.to_rgba(self.data.flatten()).reshape(self.data.shape+(4,))
         # rollaxis puts the last color dimension first, to allow output of separate channels: r,g,b,a = dataset.raw
         color_data = (np.clip(color_data, 0, 1) * 255).astype(np.uint8)
