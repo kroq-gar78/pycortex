@@ -61,10 +61,6 @@ else:
     _get_mapper = None
 get_mapper = DocLoader("get_mapper", ".mapper", "cortex", actual_func=_get_mapper)
 
-#from .mapper.point import PointNN
-#reveal_type(PointNN().sampler)
-#getattr(import_module(".mapper", "cortex"), "get_mapper")
-
 def get_roipack(*args, **kwargs):
     warnings.warn('Please use db.get_overlay instead', DeprecationWarning)
     return db.get_overlay(*args, **kwargs)
