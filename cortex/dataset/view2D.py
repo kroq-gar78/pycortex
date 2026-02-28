@@ -148,7 +148,7 @@ class Volume2D(Dataview2D):
     """
     _cls = VolumeData
 
-    def __init__(self, dim1: Union[npt.NDArray, VolumeData], dim2: Union[npt.NDArray, VolumeData], subject: Optional[str]=None, xfmname: Optional[str]=None, description: str="", cmap: Optional[str]=None,
+    def __init__(self, dim1: Union[npt.NDArray, Volume], dim2: Union[npt.NDArray, Volume], subject: Optional[str]=None, xfmname: Optional[str]=None, description: str="", cmap: Optional[str]=None,
                  vmin: Optional[float]=None, vmax: Optional[float]=None, vmin2: Optional[float]=None, vmax2: Optional[float]=None, **kwargs):
         self.dim1: Volume
         self.dim2: Volume
@@ -244,7 +244,7 @@ class Vertex2D(Dataview2D):
     _cls = VertexData
     blend_curvature = _cls.blend_curvature  # hacky inheritance
 
-    def __init__(self, dim1: Union[npt.NDArray, VertexData], dim2: Union[npt.NDArray, VertexData], subject: Optional[str]=None, description: str="", cmap: Optional[str]=None,
+    def __init__(self, dim1: Union[npt.NDArray, Vertex], dim2: Union[npt.NDArray, Vertex], subject: Optional[str]=None, description: str="", cmap: Optional[str]=None,
                  vmin: Optional[float]=None, vmax: Optional[float]=None, vmin2: Optional[float]=None, vmax2: Optional[float]=None, **kwargs):
         self.dim1: Vertex
         self.dim2: Vertex
