@@ -3,7 +3,7 @@ from __future__ import annotations
 import glob
 import json
 import os
-from typing import Optional, Union, cast, overload
+from typing import Any, Optional, Union, cast, overload, Literal
 
 import h5py
 import numpy as np
@@ -23,7 +23,10 @@ except ImportError:
     from matplotlib.cm import register_cmap
 
 @overload
-def normalize(data: tuple) -> Union[Volume, Vertex]: ...
+def normalize(data: tuple[Any, Any, Any]) -> Volume: ...
+
+@overload
+def normalize(data: tuple[Any, Any]) -> Vertex: ...
 
 @overload
 def normalize(data: Dataview) -> Dataview: ...
