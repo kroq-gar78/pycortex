@@ -616,7 +616,7 @@ def _find_mask(nvox: int, subject: str, xfmname: str):
 
 
 class _masker(object):
-    def __init__(self, dv):
+    def __init__(self, dv: VolumeData): # TODO: should be braindata + dataview
         self.dv = dv
 
         self.data = None
@@ -628,7 +628,8 @@ class _masker(object):
             mask = db.get_mask(self.dv.subject, self.dv.xfmname, masktype)
             return self.dv.copy(self.dv.volume[:,mask].squeeze())
         except:
-            self.dv.copy(self.dv.volume[:, mask].squeeze())
+            # TODO: should be return?
+            return self.dv.copy(self.dv.volume[:, mask].squeeze())
 
 def _hash(array):
     '''A simple numpy hash function'''
