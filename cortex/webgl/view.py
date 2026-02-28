@@ -9,7 +9,7 @@ import random
 import shutil
 import threading
 import time
-from typing import cast, Any, Callable, Optional
+from typing import Union, cast, Any, Callable, Optional
 import warnings
 import webbrowser
 from configparser import NoOptionError
@@ -284,7 +284,7 @@ def make_static(
 
 
 def show(
-    data: dataset.Dataset | Dataview,
+    data: Union[dataset.Dataset, Dataview],
     autoclose: Optional[bool]=None,
     open_browser: Optional[bool]=None,
     port: Optional[int]=None,
