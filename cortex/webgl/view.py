@@ -21,6 +21,7 @@ import numpy as np
 from tornado import web
 
 from .. import dataset, options, utils, volume
+from ..dataset.views import Dataview
 from ..database import db
 from . import serve
 from .data import Package
@@ -283,7 +284,7 @@ def make_static(
 
 
 def show(
-    data: dataset.Dataset,
+    data: dataset.Dataset | Dataview,
     autoclose: Optional[bool]=None,
     open_browser: Optional[bool]=None,
     port: Optional[int]=None,
@@ -419,7 +420,7 @@ def show(
         smootherstep=(lambda x, y, m: linear(x, y, 6*m**5 - 15*m**4 + 10*m**3))
     )
 
-    post_name = Queue()
+    post_name: Queue[str] = Queue()
 
     # Put together all view options
     my_viewopts: dict[str, Any] = dict(options.config.items('webgl_viewopts'))
