@@ -3,7 +3,7 @@ import os
 import tempfile
 import binascii
 import numpy as np
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, IO
 
 from matplotlib.figure import Figure
 
@@ -234,7 +234,7 @@ def make_figure(braindata: dataset.Dataview, recache: bool=False, pixelwise: boo
 
     return fig
 
-def make_png(fname: str, braindata: dataset.Dataview, recache: bool=False, pixelwise: bool=True, sampler: str='nearest', height: int=1024,
+def make_png(fname: str | os.PathLike | IO, braindata: dataset.Dataview, recache: bool=False, pixelwise: bool=True, sampler: str='nearest', height: int=1024,
              bgcolor: None=None, dpi: int=100, **kwargs) -> None:
     """Create a PNG of the VertexData or VolumeData on a flatmap.
 
