@@ -3,6 +3,7 @@ import numpy as np
 import tempfile
 import pytest
 
+import cortex.quickflat.utils # for ty
 from cortex.testing_utils import has_installed
 
 no_inkscape = not has_installed('inkscape')
