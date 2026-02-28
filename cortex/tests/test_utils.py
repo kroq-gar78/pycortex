@@ -1,4 +1,5 @@
 import cortex
+import cortex.utils
 
 def test_download_subject():
     # Test that newly downloaded subjects are added to the current database.
