@@ -205,7 +205,7 @@ class VolumeRGB(DataviewRGB):
     blue: Volume
     _alpha: Optional[Union[npt.NDArray, Volume]]
 
-    def __init__(self, channel1: Union[npt.NDArray, VolumeData], channel2: Union[npt.NDArray, VolumeData], channel3: Union[npt.NDArray, VolumeData], subject: Optional[str]=None, xfmname: Optional[str]=None, alpha: Optional[Union[npt.NDArray, VolumeData]]=None, description: str="",
+    def __init__(self, channel1: Union[npt.NDArray, Volume], channel2: Union[npt.NDArray, Volume], channel3: Union[npt.NDArray, Volume], subject: Optional[str]=None, xfmname: Optional[str]=None, alpha: Optional[Union[npt.NDArray, Volume]]=None, description: str="",
                  state=None, channel1color: Color=Colors.Red, channel2color: Color=Colors.Green, channel3color: Color=Colors.Blue,
                  max_color_value: Optional[float]=None, max_color_saturation: float=1.0, shared_range: bool=False, shared_vmin: Optional[float]=None,
                  shared_vmax: Optional[float]=None, **kwargs):
@@ -529,8 +529,9 @@ class VertexRGB(DataviewRGB):
     red: Vertex
     green: Vertex
     blue: Vertex
+    _alpha: Optional[Union[npt.NDArray, Vertex]]
 
-    def __init__(self, red: Union[npt.NDArray, VertexData], green: Union[npt.NDArray, VertexData], blue: Union[npt.NDArray, VertexData], subject: Optional[str]=None, alpha: Optional[Union[npt.NDArray, VertexData]]=None, description: str="",
+    def __init__(self, red: Union[npt.NDArray, Vertex], green: Union[npt.NDArray, Vertex], blue: Union[npt.NDArray, Vertex], subject: Optional[str]=None, alpha: Optional[Union[npt.NDArray, Vertex]]=None, description: str="",
                  state=None, **kwargs):
 
         if isinstance(red, VertexData):
@@ -579,7 +580,7 @@ class VertexRGB(DataviewRGB):
         return alpha
 
     @alpha.setter
-    def alpha(self, alpha):
+    def alpha(self, alpha: Optional[Union[npt.NDArray, Vertex]]):
         self._alpha = alpha
 
     @property
