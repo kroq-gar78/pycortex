@@ -257,8 +257,8 @@ class ClientSocket(websocket.WebSocketHandler):
             self.parent.response.put(message)
 
 class WebApp(threading.Thread):
-    daemon = True
-    disconnect_on_close = True
+    daemon: bool = True
+    disconnect_on_close: bool = True
 
     def __init__(self, handlers, port):
         super(WebApp, self).__init__()
