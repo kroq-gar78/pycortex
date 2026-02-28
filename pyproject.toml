@@ -22,5 +22,9 @@ ignore-words-list = 'nd,acount,anormal,fpt,coo,transpart,FO,lins'
 # TODO: remove before PR
 dev = [
     "ipython>=8.37.0",
+    "mypy>=1.19.1",
     "pyright[nodejs]>=1.1.405",
+    "pytest-cov>=7.0.0",
+    "pytest-monkeytype>=1.1.0",
+    "stubgen-pyx>=0.2.2",
 ]
