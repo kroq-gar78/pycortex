@@ -18,6 +18,10 @@ check-hidden = true
 # ignore-regex = ''
 ignore-words-list = 'nd,acount,anormal,fpt,coo,transpart,FO,lins'
 
+[tool.mypy]
+allow_redefinition = true
+disable_error_code = "import-untyped"
+
 [dependency-groups]
 # TODO: remove before PR
 dev = [
