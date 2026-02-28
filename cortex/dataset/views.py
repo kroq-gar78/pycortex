@@ -376,8 +376,8 @@ class Vertex(VertexData, Dataview):
                          description=self.description, state=self.state,
                          **self.attrs)
 
-    def map(self, target_subj, surface_type='fiducial', 
-            hemi='both', fs_subj=None, **kwargs):
+    def map(self, target_subj: str, surface_type: str='fiducial',
+            hemi: Literal['lh', 'rh', 'both']='both', fs_subj: Optional[str]=None, **kwargs) -> Vertex:
         """Map this data from this surface to another surface
         
         Calls `cortex.freesurfer.vertex_to_vertex()`  with this 
