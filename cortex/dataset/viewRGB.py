@@ -510,7 +510,7 @@ class VolumeRGB(DataviewRGB):
         )
 
     @property
-    def alpha(self):
+    def alpha(self) -> Volume:
         """Compute alpha transparency"""
         alpha = self._alpha
         if alpha is None:
@@ -551,7 +551,7 @@ class VolumeRGB(DataviewRGB):
         return sdict
 
     @property
-    def volume(self):
+    def volume(self) -> npt.NDArray[np.uint8]:
         """5-dimensional volume (t, z, y, x, rgba) with data that has been mapped
         into 8-bit unsigned integers that correspond to colors.
         """
@@ -774,7 +774,7 @@ class VertexRGB(DataviewRGB):
         )
 
     @property
-    def alpha(self):
+    def alpha(self) -> Vertex:
         """Compute alpha transparency"""
         alpha = self._alpha
         if alpha is None:
@@ -800,7 +800,7 @@ class VertexRGB(DataviewRGB):
         self._alpha = alpha
 
     @property
-    def vertices(self):
+    def vertices(self) -> npt.NDArray[np.uint8]:
         """3-dimensional volume (t, v, rgba) with data that has been mapped
         into 8-bit unsigned integers that correspond to colors.
         """
@@ -835,11 +835,11 @@ class VertexRGB(DataviewRGB):
         return sdict
 
     @property
-    def left(self):
+    def left(self) -> npt.NDArray[np.uint8]:
         return self.vertices[:, : self.red.llen]
 
     @property
-    def right(self):
+    def right(self) -> npt.NDArray[np.uint8]:
         return self.vertices[:, self.red.llen :]
 
     def __repr__(self):
