@@ -247,7 +247,7 @@ class StaticFileHandler(tornado.web.RequestHandler):
 
 
 class ClientSocket(websocket.WebSocketHandler):
-    def initialize(self, parent):
+    def initialize(self, parent: 'WebApp'):
         self.parent = parent
 
     def open(self):
@@ -399,7 +399,7 @@ class JSProxy(Generic[P]):
         else:
             return resp
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: Union[int, str]) -> 'JSProxy':
         assert not isinstance(idx, (slice, list, tuple, np.ndarray))
         return JSProxy(self.send, "%s.%d"%(self.name, idx))
 
