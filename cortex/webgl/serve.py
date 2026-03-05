@@ -19,12 +19,20 @@ import mimetypes
 import functools
 import threading
 
+from typing import Callable, Literal, cast, Generic, TypeVar, Union, Any, overload
+if sys.version_info < (3, 10):
+    from typing_extensions import ParamSpec
+else:
+    from typing import ParamSpec
+
 import numpy as np
 import tornado.web
 import tornado.ioloop
 import tornado.httpserver
 from tornado import websocket
 from tornado.web import HTTPError
+
+from .. import dataset
 
 cwd = os.path.split(os.path.abspath(__file__))[0]
 hostname = socket.gethostname()
@@ -259,25 +267,27 @@ class ClientSocket(websocket.WebSocketHandler):
 class WebApp(threading.Thread):
     daemon: bool = True
     disconnect_on_close: bool = True
+    server: tornado.httpserver.HTTPServer # TODO: why explicit annotation needed? something to do with Configurable?
 
-    def __init__(self, handlers, port):
+    def __init__(self, handlers: list[Union[tuple[str, type[tornado.web.RequestHandler]], tuple[str, type[tornado.web.RequestHandler], dict]]], port: int):
         super(WebApp, self).__init__()
         self.handlers = handlers + [
             (r"/wsconnect/", ClientSocket, dict(parent=self)),
             (r"/(.*)", tornado.web.StaticFileHandler, dict(path=cwd)),
         ]
         self.port = port
-        self.response = Queue()
+        self.response: Queue[Union[str, bytes]] = Queue()
         self.connect = threading.Event()
-        self.sockets = []
+        # TODO: figure out where Sockets are set
+        self.sockets: list[websocket.WebSocketHandler] = []
 
     @property
-    def n_clients(self):
+    def n_clients(self) -> int:
         num = len(self.sockets)
         return num
 
     def run(self):
-        ioloop = tornado.ioloop.IOLoop()
+        ioloop: tornado.ioloop.IOLoop = tornado.ioloop.IOLoop() # TODO: annotation needed b/c abstract class?
         ioloop.clear_current()
         ioloop.make_current()
         self.ioloop = ioloop
@@ -295,15 +305,14 @@ class WebApp(threading.Thread):
         self.server.stop()
         tornado.ioloop.IOLoop.current().stop()
 
-    def send(self, **msg):
-        if not isinstance(msg, str):
-            msg = json.dumps(msg, cls=NPEncode, ensure_ascii=False)
+    def send(self, **kwargs: dict[str, Any]) -> Union[list[dataset.JSON], list[None]]:
+        msg = json.dumps(kwargs, cls=NPEncode, ensure_ascii=False)
 
-        async def _send(sockets, msg):
+        async def _send(sockets: list[websocket.WebSocketHandler], msg: str):
             for sock in sockets:
                 await sock.write_message(msg)
 
-        self.ioloop.add_callback(_send, self.sockets, msg)
+        self.ioloop.add_callback(_send, self.sockets, cast(str, msg))
 
         try:
             return [json.loads(self.response.get(timeout=2)) for _ in range(self.n_clients)]
@@ -315,16 +324,27 @@ class WebApp(threading.Thread):
         self.connect.clear()
         return JSProxy(self.send)
 
-class JSProxy(object):
-    def __init__(self, sendfunc, name="window"):
+T = TypeVar('T')
+P = ParamSpec('P')
+
+class JSProxy(Generic[P]):
+    name: str
+
+    def __init__(self, sendfunc: Callable[P, Union[list[dataset.JSON], list[None]]], name: str = "window"):
         super(JSProxy, self).__setattr__('send', sendfunc)
         super(JSProxy, self).__setattr__('name', name)
         
         # self.attrs = self.send(method='query', params=[self.name])[0]
         self.max_time_retry = 10.  # in seconds
 
+    # `method` corresponds to the functions defined in `js/python_interface.js``.
+    def send(self, *, method: Literal['get', 'query', 'set', 'run', 'index'], params: list[Any]) -> Union[list[dataset.JSON], list[None]]:
+        raise NotImplementedError("send method should be provided by WebApp and is not meant to be called directly on JSProxy instances.")
+
+    # TODO: would be better described with tuples instead of lists:
+    # `dict[str, Union[tuple[str,], tuple[str, Any]]]`
     @property
-    def attrs(self):
+    def attrs(self) -> dict[str, Union[list[str], list[Union[str, Any]]]]:
         return_value = self.send(method='query', params=[self.name])[0]
         # Sometimes the return value can be None or an int (I assume an error value).
         # This can be caused by the delay in updating the JS viewer.
@@ -332,9 +352,9 @@ class JSProxy(object):
         if return_value is None or not isinstance(return_value, dict):
             time.sleep(0.1)
             return_value = self.send(method='query', params=[self.name])[0]
-        return return_value
+        return cast(dict[str, dataset.JSON], return_value)
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr: str) -> Union['JSProxy', Any]:
         # if attr == 'attrs':
         #    return self.send(method='query', params=[self.name])[0]
         tstart = time.time()
@@ -349,10 +369,11 @@ class JSProxy(object):
         if attrs[attr][0] in ["object", "function"]:
             return JSProxy(self.send, "%s.%s"%(self.name, attr))
         else:
-            return attrs[attr][1]
+            return cast(Any, attrs[attr][1])
 
-    def __setattr__(self, attr, value):
+    def __setattr__(self, attr: str, value: Any):
         if hasattr(self, "attrs") and self.attrs is None:
+            # TODO: does this ever happen??
             return super(JSProxy, self).__setattr__(attr, value)
         if not hasattr(self, "attrs") or attr not in self.attrs:
             return super(JSProxy, self).__setattr__(attr, value)
