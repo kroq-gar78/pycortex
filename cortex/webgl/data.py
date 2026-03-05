@@ -11,21 +11,28 @@ import os
 import json
 from io import BytesIO
 import numpy as np
+import numpy.typing as npt
 
 from .. import dataset
 from .. import volume
+from typing import Any, Optional, TypedDict, Union, cast
 
+class PackageMetadata(TypedDict):
+    views: list[dataset.DataviewJSON]
+    data: dict[str, dataset.DataviewJSON]
+    images: dict[str, list[str]]
 
 #TODO: How to package multiviews?
 class Package(object):
     """Package the data into a form usable by javascript"""
-    def __init__(self, data):
+    def __init__(self, data: dataset.Dataset):
         self.dataset = dataset.normalize(data)
         self.uniques = list(data.uniques(collapse=True))
-        self.subjects = set()
+        self.subjects: set[str] = set()
         
-        self.brains = dict()
-        self.images = dict()
+        #self.brains: dict[str, dict[str, dataset.JSON]] = dict()
+        self.brains: dict[str, dataset.DataviewJSON] = dict()
+        self.images: dict[str, list[bytes]] = dict()
         for brain in self.uniques:
             name = brain.name
             self.subjects.add(brain.subject)
@@ -43,8 +50,10 @@ class Package(object):
 
             #VertexData requires reordering, only save normalized version for now
             if isinstance(brain, (dataset.Vertex, dataset.VertexRGB)):
+                # TODO: how does this work? check if tests run this part
                 self.images[name] = [encdata]
             else:
+                # TODO: make temporary typing work
                 self.images[name] = [volume.mosaic(vol, show=False) for vol in encdata]
                 if len(set([shape for m, shape in self.images[name]])) != 1:
                     raise ValueError('Internal error in mosaic')
@@ -52,7 +61,8 @@ class Package(object):
                 self.images[name] = [_pack_png(m) for m, shape in self.images[name]]
 
     @property
-    def views(self):
+    #def views(self) -> list[dataset.JSON]:
+    def views(self) -> list[dataset.DataviewJSON]:
         metadata = []
         for name, view in self.dataset:
             meta = view.to_json(simple=False)
@@ -62,7 +72,7 @@ class Package(object):
             metadata.append(meta)
         return metadata
 
-    def reorder(self, subjects):
+    def reorder(self, subjects: dict[str, str]) -> None:
         indices = dict((k, np.load(os.path.splitext(v)[0]+".npz")) for k, v in subjects.items())
         for brain in self.uniques:
             if isinstance(brain, (dataset.Vertex, dataset.VertexRGB)):
@@ -78,19 +88,20 @@ class Package(object):
         for npz in indices.values():
             npz.close()
 
-    def metadata(self, submap=None, **kwargs):
+    # TODO: submap?
+    def metadata(self, submap: Optional[dict[str, str]]=None, **kwargs) -> PackageMetadata:
         if submap is not None:
             for data in self.brains.values():
                 data['subject'] = submap[data['subject']]
-        return dict(views=self.views, data=self.brains, images=self.image_names(**kwargs))
+        return PackageMetadata(views=self.views, data=self.brains, images=self.image_names(**kwargs))
 
-    def image_names(self, fmt="/data/{name}/{frame}/"):
-        names = dict()
+    def image_names(self, fmt: str="/data/{name}/{frame}/") -> dict[str, list[str]]:
+        names: dict[str, list[str]] = dict()
         for name, imgs in self.images.items():
             names[name] = [fmt.format(name=name, frame=i) for i in range(len(imgs))]
         return names
 
-def _pack_png(mosaic):
+def _pack_png(mosaic: npt.NDArray) -> bytes:
     from PIL import Image
     buf = BytesIO()
     if mosaic.dtype not in (np.float32, np.uint8):
