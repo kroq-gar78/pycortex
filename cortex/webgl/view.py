@@ -7,9 +7,14 @@ import mimetypes
 import os
 import random
 import shutil
+import sys
 import threading
 import time
-from typing import Union, cast, Any, Callable, Optional
+from typing import TypeVar, Union, cast, Any, Callable, Optional
+if sys.version_info < (3, 10):
+    from typing_extensions import ParamSpec
+else:
+    from typing import ParamSpec
 import warnings
 import webbrowser
 from configparser import NoOptionError
@@ -167,7 +172,7 @@ def make_static(
     db.auxfile = None
 
     ## Rename files to anonymize
-    submap = dict()
+    submap: dict[str, str] = dict()
     for i, (subj, ctmfile) in enumerate(ctms.items()):
         oldpath, fname = os.path.split(ctmfile)
         fname, ext = os.path.splitext(fname)
@@ -392,7 +397,7 @@ def show(
     db.auxfile = data
 
     #Extract the list of stimuli, for special-casing
-    stims = dict()
+    stims: dict[str, str] = dict()
     for name, view in data:
         if 'stim' in view.attrs and os.path.exists(view.attrs['stim']):
             sname = os.path.split(view.attrs['stim'])[1]
@@ -455,7 +460,7 @@ def show(
         pickerfun = lambda a, b: None
 
     class CTMHandler(web.RequestHandler):
-        def get(self, path):
+        def get(self, path: str):
             subj, path = path.split('/')
             if path == '':
                 self.set_header("Content-Type", "application/json")
@@ -469,8 +474,9 @@ def show(
                 self.write(open(os.path.join(fpath, path), 'rb').read())
 
     class DataHandler(web.RequestHandler):
-        def get(self, path):
+        def get(self, path: str):
             path = path.strip("/")
+            frame: Union[int, str]
             try:
                 dataname, frame = path.split('/')
             except ValueError:
@@ -503,7 +509,7 @@ def show(
         def initialize(self):
             pass
 
-        def get(self, path):
+        def get(self, path: str):
             if path not in stims:
                 self.set_status(404)
                 self.write_error(404)
@@ -546,9 +552,11 @@ def show(
                         data = png
                 svgfile.write(data)
 
-    class JSMixer(serve.JSProxy):
+    P = ParamSpec('P')
+
+    class JSMixer(serve.JSProxy[P]):
         @property
-        def view_props(self):
+        def view_props(self) -> list[str]:
             """An enumerated list of settable properties for views. 
             There may be a way to get this from the javascript object, 
             but I (ML) don't know how.
@@ -580,8 +588,9 @@ def show(
 
             """
             # Set unfolding level first, as it interacts with other arguments
-            surface = getattr(self.ui, "surface")
-            subject_list = surface._folders.attrs.keys()
+            assert isinstance(self.ui, serve.JSProxy)
+            surface: serve.JSProxy[P] = getattr(self.ui, "surface")
+            subject_list = cast(serve.JSProxy[P], surface._folders).attrs.keys()
             # Better to only self.view_props once; it interacts with javascript, 
             # don't want to do that too often, it leads to glitches.
             vw_props = copy.copy(self.view_props)
