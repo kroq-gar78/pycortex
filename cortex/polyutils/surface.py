@@ -3,6 +3,7 @@
 from collections import OrderedDict
 
 import numpy as np
+import numpy.typing as npt
 import numexpr as ne
 from scipy.spatial import distance
 from scipy import sparse
@@ -11,6 +12,7 @@ import scipy.sparse.linalg
 from . import exact_geodesic
 from . import subsurface
 from .misc import _memo
+from typing import Iterator, Optional, Union, overload
 
 
 class Surface(exact_geodesic.ExactGeodesicMixin, subsurface.SubsurfaceMixin):
@@ -27,7 +29,7 @@ class Surface(exact_geodesic.ExactGeodesicMixin, subsurface.SubsurfaceMixin):
     polys : 2D ndarray, shape (total_polys, 3)
         Indices of the vertices in each triangle in the surface.
     """
-    def __init__(self, pts, polys):
+    def __init__(self, pts: npt.NDArray[np.floating], polys: npt.NDArray[np.integer]) -> None:
         self.pts = pts.astype(np.double)
         self.polys = polys
 
@@ -44,7 +46,7 @@ class Surface(exact_geodesic.ExactGeodesicMixin, subsurface.SubsurfaceMixin):
     
     @property
     @_memo
-    def connected(self):
+    def connected(self) -> sparse.coo_matrix:
         """Sparse matrix of vertex-face associations.
         """
         npt = len(self.pts)
@@ -164,7 +166,7 @@ class Surface(exact_geodesic.ExactGeodesicMixin, subsurface.SubsurfaceMixin):
         Be2 = sparse.coo_matrix((self.face_areas, (self.polys[:,2], self.polys[:,0])), (npt, npt))
         Be3 = sparse.coo_matrix((self.face_areas, (self.polys[:,0], self.polys[:,1])), (npt, npt))
         Bd = self.connected.dot(self.face_areas) / 6
-        dBd = scipy.sparse.dia_matrix((Bd,[0]), (len(D),len(D)))
+        dBd = sparse.dia_matrix((Bd,[0]), (len(D),len(D)))
         B = (Be1 + Be1.T + Be2 + Be2.T + Be3 + Be3.T)/12 + dBd
         return B, D, W, V
 
@@ -742,13 +744,20 @@ class Surface(exact_geodesic.ExactGeodesicMixin, subsurface.SubsurfaceMixin):
         weighted_graph.add_weighted_edges_from(self.iter_surfedges_weighted)
         return weighted_graph
 
-    def extract_chunk(self, nfaces=100, seed=None, auxpts=None):
+    @overload
+    def extract_chunk(self, nfaces: int=100, seed: Optional[int]=None, auxpts: None=None) -> tuple[npt.NDArray[np.floating], npt.NDArray[np.integer], npt.NDArray]: ...
+
+    @overload
+    def extract_chunk(self, nfaces: int=100, seed: Optional[int]=None, *, auxpts: npt.NDArray) -> tuple[npt.NDArray[np.floating], npt.NDArray[np.integer], npt.NDArray]: ...
+
+    def extract_chunk(self, nfaces: int=100, seed: Optional[int]=None, auxpts: Optional[npt.NDArray]=None) -> Union[tuple[npt.NDArray[np.floating], npt.NDArray[np.integer], npt.NDArray], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]]:
         '''Extract a chunk of the surface using breadth first search, for testing purposes'''
-        node = seed
         if seed is None:
             node = np.random.randint(len(self.pts))
+        else:
+            node = seed
 
-        ptmap = dict()
+        ptmap: dict[int, int] = dict()
         queue = [node]
         faces = set()
         visited = set([node])
@@ -757,12 +766,15 @@ class Surface(exact_geodesic.ExactGeodesicMixin, subsurface.SubsurfaceMixin):
             for face in self.connected[node].indices:
                 if face not in faces:
                     faces.add(face)
+                    pt: int # NOTE: this is actually probably np.intp
                     for pt in self.polys[face]:
                         if pt not in visited:
                             visited.add(pt)
                             queue.append(pt)
 
-        pts, aux, polys = [], [], []
+        pts: list[npt.NDArray[np.floating]] = []
+        aux: list[npt.NDArray] = []
+        polys: list[list[int]] = []
         for face in faces:
             for pt in self.polys[face]:
                 if pt not in ptmap:
@@ -830,7 +842,7 @@ class Surface(exact_geodesic.ExactGeodesicMixin, subsurface.SubsurfaceMixin):
 
             yield pts.points, np.array(list(polys.triangles))
 
-    def patches(self, auxpts=None, n=1):
+    def patches(self, auxpts: None=None, n: float=1) -> Iterator[Union[npt.NDArray, None]]:
         def align_polys(p, polys):
             x, y = np.nonzero(polys == p)
             y = np.vstack([y, (y+1)%3, (y+2)%3]).T
