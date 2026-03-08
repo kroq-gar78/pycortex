@@ -37,7 +37,7 @@ from .. import dataset
 cwd = os.path.split(os.path.abspath(__file__))[0]
 hostname = socket.gethostname()
 
-def make_base64(imgfile):
+def make_base64(imgfile: os.PathLike[str]) -> str:
     with open(imgfile, 'rb') as img:
         mtype = mimetypes.guess_type(imgfile)[0]
         imbytes = base64.encodebytes(img.read())
