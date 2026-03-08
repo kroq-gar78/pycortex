@@ -27,7 +27,6 @@ import numpy as np
 from tornado import web
 
 from .. import dataset, options, utils, volume
-from ..dataset.views import Dataview
 from ..database import db
 from . import serve
 from .data import Package
@@ -50,7 +49,7 @@ colormaps = [(os.path.splitext(os.path.split(cm)[1])[0], serve.make_base64(cm))
 
 def make_static(
     outpath: str,
-    data: Union[dataset.Dataset, Dataview],
+    data: Union[dataset.DatasetLike, dataset.Dataview],
     recache: bool=False,
     template: str="static.html",
     anonymize: bool=False,
@@ -290,7 +289,7 @@ def make_static(
 
 
 def show(
-    data: Union[dataset.Dataset, Dataview],
+    data: Union[dataset.DatasetLike, dataset.Dataview],
     autoclose: Optional[bool]=None,
     open_browser: Optional[bool]=None,
     port: Optional[int]=None,
