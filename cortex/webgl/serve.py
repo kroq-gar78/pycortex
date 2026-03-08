@@ -324,7 +324,6 @@ class WebApp(threading.Thread):
         self.connect.clear()
         return JSProxy(self.send)
 
-T = TypeVar('T') # TODO: remove if unused
 P = ParamSpec('P')
 
 class JSProxy(Generic[P]):
