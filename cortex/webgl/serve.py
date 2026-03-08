@@ -305,7 +305,7 @@ class WebApp(threading.Thread):
         self.server.stop()
         tornado.ioloop.IOLoop.current().stop()
 
-    def send(self, **kwargs: dict[str, Any]) -> Union[list[dataset.JSON], list[None]]:
+    def send(self, **kwargs: Any) -> Union[list[dataset.JSON], list[None]]:
         msg = json.dumps(kwargs, cls=NPEncode, ensure_ascii=False)
 
         async def _send(sockets: list[websocket.WebSocketHandler], msg: str):
@@ -324,7 +324,7 @@ class WebApp(threading.Thread):
         self.connect.clear()
         return JSProxy(self.send)
 
-T = TypeVar('T')
+T = TypeVar('T') # TODO: remove if unused
 P = ParamSpec('P')
 
 class JSProxy(Generic[P]):
