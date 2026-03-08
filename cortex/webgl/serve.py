@@ -32,8 +32,6 @@ import tornado.httpserver
 from tornado import websocket
 from tornado.web import HTTPError
 
-from .. import dataset
-
 cwd = os.path.split(os.path.abspath(__file__))[0]
 hostname = socket.gethostname()
 
@@ -264,6 +262,8 @@ class ClientSocket(websocket.WebSocketHandler):
         else:
             self.parent.response.put(message)
 
+JSON = Union[dict[str, "JSON"], list["JSON"], str, int, float, bool, None]
+
 class WebApp(threading.Thread):
     daemon: bool = True
     disconnect_on_close: bool = True
@@ -305,7 +305,7 @@ class WebApp(threading.Thread):
         self.server.stop()
         tornado.ioloop.IOLoop.current().stop()
 
-    def send(self, **kwargs: Any) -> Union[list[dataset.JSON], list[None]]:
+    def send(self, **kwargs: Any) -> Union[list[JSON], list[None]]:
         msg = json.dumps(kwargs, cls=NPEncode, ensure_ascii=False)
 
         async def _send(sockets: list[websocket.WebSocketHandler], msg: str):
@@ -329,7 +329,7 @@ P = ParamSpec('P')
 class JSProxy(Generic[P]):
     name: str
 
-    def __init__(self, sendfunc: Callable[P, Union[list[dataset.JSON], list[None]]], name: str = "window"):
+    def __init__(self, sendfunc: Callable[P, Union[list[JSON], list[None]]], name: str = "window"):
         super(JSProxy, self).__setattr__('send', sendfunc)
         super(JSProxy, self).__setattr__('name', name)
         
@@ -337,7 +337,7 @@ class JSProxy(Generic[P]):
         self.max_time_retry = 10.  # in seconds
 
     # `method` corresponds to the functions defined in `js/python_interface.js``.
-    def send(self, *, method: Literal['get', 'query', 'set', 'run', 'index'], params: list[Any]) -> Union[list[dataset.JSON], list[None]]:
+    def send(self, *, method: Literal['get', 'query', 'set', 'run', 'index'], params: list[Any]) -> Union[list[JSON], list[None]]:
         raise NotImplementedError("send method should be provided by WebApp and is not meant to be called directly on JSProxy instances.")
 
     # TODO: would be better described with tuples instead of lists:
@@ -351,7 +351,7 @@ class JSProxy(Generic[P]):
         if return_value is None or not isinstance(return_value, dict):
             time.sleep(0.1)
             return_value = self.send(method='query', params=[self.name])[0]
-        return cast(dict[str, dataset.JSON], return_value)
+        return cast(dict[str, JSON], return_value)
 
     def __getattr__(self, attr: str) -> Union['JSProxy', Any]:
         # if attr == 'attrs':
