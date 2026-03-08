@@ -4,7 +4,7 @@ import errno
 import shutil
 import sys
 import tempfile
-from typing import Any, Optional, TypedDict, Union
+from typing import Any, Mapping, Optional, TypedDict, Union
 if sys.version_info < (3, 11):
     from typing_extensions import NotRequired
 else:
@@ -49,7 +49,7 @@ def plot_panels(
     windowsize: tuple[int, int]=(1600 * 4, 900 * 4),
     save_name: Optional[str]=None,
     sleep: float=10,
-    viewer_params: dict[str, Any]=dict(labels_visible=[], overlays_visible=["rois"]),
+    viewer_params: Mapping[str, Any]=dict(labels_visible=[], overlays_visible=["rois"]),
     interpolation: str="nearest",
     layers: int=1,
 ) -> Figure:
