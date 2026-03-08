@@ -595,7 +595,7 @@ class VolumeRGB(DataviewRGB):
         return super(VolumeRGB, self)._write_hdf(h5, name=name, xfmname=[self.xfmname])
 
     @property
-    def raw(self):
+    def raw(self) -> VolumeRGB:
         return self
 
 
@@ -853,5 +853,5 @@ class VertexRGB(DataviewRGB):
         return "__%s" % _hash(self.vertices)[:16]
 
     @property
-    def raw(self):
+    def raw(self) -> VertexRGB:
         return self
