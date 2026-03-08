@@ -45,7 +45,7 @@ PanelParams = TypedDict(
 def plot_panels(
     volume: Union[Volume, Vertex],
     panels: list[PanelParams],
-    figsize: npt.ArrayLike=(16, 9),
+    figsize: tuple[float, float]=(16, 9),
     windowsize: tuple[int, int]=(1600 * 4, 900 * 4),
     save_name: Optional[str]=None,
     sleep: float=10,
