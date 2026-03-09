@@ -27,6 +27,7 @@ dev = [
     "ipdb>=0.13.13",
     "ipython",
     "mypy",
+    "playwright>=1.58.0",
     "pyright[nodejs]>=1.1.405",
     "pytest",
     "pytest-cov",

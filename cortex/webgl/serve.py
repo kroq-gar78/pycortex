@@ -300,7 +300,7 @@ class WebApp(threading.Thread):
     def stop(self):
         print("Stopping server")
         self.server.stop()
-        tornado.ioloop.IOLoop.current().stop()
+        self.ioloop.stop()
 
     def send(self, **kwargs: Any) -> Union[list[JSON], list[None]]:
         msg = json.dumps(kwargs, cls=NPEncode, ensure_ascii=False)
