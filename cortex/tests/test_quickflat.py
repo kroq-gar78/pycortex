@@ -41,3 +41,13 @@ def test_make_flatmap_image_nanmean(type_, nanmean):
         vol, nanmean=nanmean)
     # assert that the nanmean only returns NaNs and 1s
     assert np.nanmin(img) == 1
+
+
+@pytest.mark.skipif(no_inkscape, reason='Inkscape required')
+def test_quickflat_curvature():
+    mask = cortex.db.get_mask("S1", "fullhead", type="thick")
+    data = np.ones(mask.sum())
+    # set 50% of the values in the dataset to NaN
+    data[np.random.rand(*data.shape) > 0.5] = np.nan
+    vol = cortex.Volume(data, "S1", "fullhead", vmin=0, vmax=1)
+    cortex.quickflat.make_figure(vol, with_curvature=True)
