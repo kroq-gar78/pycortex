@@ -325,6 +325,7 @@ P = ParamSpec('P')
 
 class JSProxy(Generic[P]):
     name: str
+    server: WebApp
 
     def __init__(self, sendfunc: Callable[P, Union[list[JSON], list[None]]], name: str = "window"):
         super(JSProxy, self).__setattr__('send', sendfunc)
