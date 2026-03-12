@@ -5,10 +5,7 @@ import json
 import stat
 import email
 import sys
-if sys.version_info < (3,):
-    from Queue import Queue
-else:
-    from queue import Queue
+from queue import Queue
 import struct
 import socket
 import logging
