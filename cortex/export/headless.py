@@ -41,12 +41,15 @@ Requirements
 import concurrent.futures
 import contextlib
 import logging
+import os
+import sys
 import threading
 import time
-from typing import Any, Mapping, Optional
+from typing import Any, Literal, Mapping, Optional
 
 import cortex
 from .. import dataset
+
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +97,58 @@ def _wait_for_viewer_loaded(handle, timeout: float = 60.0) -> None:
     )
 
 
+Renderer = Literal["gpu", "swiftshader"]
+
+
+def _gpu_rendering_available() -> bool:
+    """Return True when hardware GPU rendering appears available.
+
+    On Linux we only enable GPU-backed Chromium when at least one common GPU
+    device node is present *and* accessible to the current process; otherwise
+    we fall back to SwiftShader.
+
+    On non-Linux platforms, Chromium's default GPU probing is generally more
+    reliable than host-level heuristics, so we allow GPU mode by default.
+    """
+    if not sys.platform.startswith("linux"):
+        return True
+
+    gpu_nodes = ["/dev/dri/renderD128", "/dev/dri/card0", "/dev/nvidiactl"]
+
+    try:
+        entries = os.listdir("/dev/dri")
+    except OSError:
+        entries = []
+
+    gpu_nodes.extend(
+        os.path.join("/dev/dri", entry)
+        for entry in entries
+        if entry.startswith(("renderD", "card"))
+    )
+
+    return any(
+        os.path.exists(path) and os.access(path, os.R_OK | os.W_OK)
+        for path in gpu_nodes
+    )
+
+
+def _chromium_launch_args(use_gpu_renderer: bool) -> list[str]:
+    """Build Chromium launch args for GPU or SwiftShader rendering."""
+    launch_args = [
+        "--enable-webgl",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+    ]
+    if use_gpu_renderer:
+        launch_args.extend([
+            "--enable-gpu",
+            "--ignore-gpu-blocklist",
+        ])
+    else:
+        launch_args.append("--use-gl=swiftshader")
+    return launch_args
+
+
 # --------------------------------------------------------------------------- #
 # Helper: run Playwright in a dedicated thread to avoid asyncio conflicts     #
 # --------------------------------------------------------------------------- #
@@ -131,10 +186,18 @@ class _PlaywrightThread:
         # the ``browser_errors`` property.
         self._browser_errors: list[str] = []
         self._errors_lock = threading.Lock()
+        self._renderer = "unknown"
+        self._renderer_override: Optional[Renderer] = None
 
     # -- public API -------------------------------------------------------- #
 
-    def start(self, url: str, *, timeout: float = 60.0) -> None:
+    def start(
+        self,
+        url: str,
+        *,
+        timeout: float = 60.0,
+        renderer: Optional[Renderer] = None,
+    ) -> None:
         """Launch the worker thread, open Chromium, and navigate to *url*.
 
         Blocks until the page has finished loading (or raises on failure).
@@ -148,6 +211,7 @@ class _PlaywrightThread:
         """
         self._url = url
         self._nav_timeout = timeout
+        self._renderer_override = renderer
         self._thread = threading.Thread(
             target=self._worker, name="PlaywrightThread", daemon=True
         )
@@ -175,6 +239,11 @@ class _PlaywrightThread:
         with self._errors_lock:
             return list(self._browser_errors)
 
+    @property
+    def renderer(self) -> str:
+        """Renderer mode selected for Chromium launch: ``gpu`` or ``swiftshader``."""
+        return self._renderer
+
     def shutdown(self) -> None:
         """Signal the worker to tear down Playwright and wait for it to finish."""
         self._shutdown_event.set()
@@ -198,14 +267,23 @@ class _PlaywrightThread:
 
         try:
             self._playwright = sync_playwright().start()
+            if self._renderer_override == "gpu":
+                use_gpu_renderer = True
+            elif self._renderer_override == "swiftshader":
+                use_gpu_renderer = False
+            else:
+                use_gpu_renderer = _gpu_rendering_available()
+            self._renderer = "gpu" if use_gpu_renderer else "swiftshader"
+            launch_args = _chromium_launch_args(use_gpu_renderer)
+            if self._renderer_override is None and not use_gpu_renderer:
+                logger.warning(
+                    "No accessible GPU device detected; using SwiftShader for "
+                    "headless WebGL rendering."
+                )
+
             self._browser = self._playwright.chromium.launch(
                 headless=True,
-                args=[
-                    "--enable-webgl",
-                    "--use-gl=swiftshader",
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                ],
+                args=launch_args,
             )
             self._page = self._browser.new_page()
 
@@ -277,6 +355,7 @@ def headless_viewer(
     viewer_params: Mapping[str, Any],
     *,
     timeout: float = 60.0,
+    renderer: Optional[Renderer] = None,
 ):
     """Context manager that yields a connected ``JSMixer`` handle rendered in a
     headless Chromium browser.
@@ -292,6 +371,10 @@ def headless_viewer(
     timeout : float
         Seconds to wait for the browser to establish the WebSocket connection
         and for ``server.get_client()`` to return (default: 60).
+    renderer : {"gpu", "swiftshader"} or None
+        Renderer mode for Chromium. If ``None`` (default), renderer is chosen
+        automatically based on machine GPU accessibility. If set, forces the
+        requested renderer.
 
     Yields
     ------
@@ -332,12 +415,14 @@ def headless_viewer(
     server.disconnect_on_close = False
 
     # ------------------------------------------------------------------
-    # 2. Launch headless Chromium with software WebGL (SwiftShader) in a
-    #    dedicated thread.  This avoids the "Playwright Sync API inside
+    # 2. Launch headless Chromium in a dedicated thread.  Renderer mode is
+    #    chosen automatically: hardware GPU when accessible, otherwise
+    #    SwiftShader software WebGL.
+    #    This also avoids the "Playwright Sync API inside
     #    the asyncio loop" error that occurs in Jupyter notebooks.
-    #    --use-gl=swiftshader provides a full WebGL implementation that
-    #    does not require a GPU or display server, making it usable in
-    #    CI / Docker / notebooks.
+    #    SwiftShader provides a full WebGL implementation that does not
+    #    require a GPU or display server, making it usable in CI / Docker
+    #    / notebooks.
     # ------------------------------------------------------------------
     pw_thread = _PlaywrightThread()
 
@@ -354,7 +439,7 @@ def headless_viewer(
             # Launch the browser and navigate.  python_interface.js runs on
             # load and sends "connect" over WebSocket, which unblocks
             # server.get_client().
-            pw_thread.start(url, timeout=timeout)
+            pw_thread.start(url, timeout=timeout, renderer=renderer)
 
             # Retrieve the handle; it should already be ready by this point,
             # but the timeout guard surfaces hung state clearly.
