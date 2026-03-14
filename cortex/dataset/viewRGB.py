@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import colorsys
-from typing import Optional, TypeVar, Union
+from typing import Optional, TypeVar, Union, cast
 import warnings
 
 import numpy as np
@@ -149,19 +149,19 @@ class DataviewRGB(Dataview):
 
     @staticmethod
     def color_voxels(
-        channel1,
-        channel2,
-        channel3,
-        channel1color,
-        channel2color,
-        channel3Color,
-        value_max,
-        saturation_max,
-        common_range,
-        common_min,
-        common_max,
-        alpha=None,
-    ):
+        channel1: Union[npt.NDArray, VolumeData, VertexData],
+        channel2: Union[npt.NDArray, VolumeData, VertexData],
+        channel3: Union[npt.NDArray, VolumeData, VertexData],
+        channel1color: npt.NDArray[np.integer] | Color[int],
+        channel2color: npt.NDArray[np.integer] | Color[int],
+        channel3Color: npt.NDArray[np.integer] | Color[int],
+        value_max: Optional[float],
+        saturation_max: float,
+        common_range: bool,
+        common_min: Optional[float],
+        common_max: Optional[float],
+        alpha: Optional[Union[npt.NDArray, VolumeData, VertexData]] = None,
+    ) -> tuple[npt.NDArray[np.uint8], npt.NDArray[np.uint8], npt.NDArray[np.uint8], npt.NDArray[np.uint8]]:
         """
         Colors voxels in 3 color dimensions but not necessarily canonical red, green, and blue
         Parameters
@@ -241,11 +241,11 @@ class DataviewRGB(Dataview):
         if common_range:
             if common_min is None:
                 if common_max is None:
-                    common_min = np.percentile(np.hstack((data1, data2, data3)), 1)
+                    common_min = cast(float, np.percentile(np.hstack((data1, data2, data3)), 1))
                 else:
                     common_min = 0
             if common_max is None:
-                common_max = np.percentile(np.hstack((data1, data2, data3)), 99)
+                common_max = cast(float, np.percentile(np.hstack((data1, data2, data3)), 99))
             data1 -= common_min
             data2 -= common_min
             data3 -= common_min
@@ -297,7 +297,7 @@ class DataviewRGB(Dataview):
                     saturation = 1.0
                 if value > 1:
                     value = 1.0
-                this_color = HSV2RGB([hue, saturation, value])
+                this_color = HSV2RGB((hue, saturation, value))
             red.flat[i] = this_color[0]
             green.flat[i] = this_color[1]
             blue.flat[i] = this_color[2]
@@ -305,7 +305,7 @@ class DataviewRGB(Dataview):
         # Now make an alpha volume
         if alpha is None:
             alpha = np.ones_like(red, np.uint8) * 255
-        alpha[mask] = 0
+        alpha[mask] = 0 # TODO: this seems like an actual issue
 
         return red, green, blue, alpha
 
@@ -391,9 +391,9 @@ class VolumeRGB(DataviewRGB):
         alpha: Optional[Union[npt.NDArray, Volume]] = None,
         description: str = "",
         state=None,
-        channel1color: Color = Colors.Red,
-        channel2color: Color = Colors.Green,
-        channel3color: Color = Colors.Blue,
+        channel1color: Color[int] = Colors.Red,
+        channel2color: Color[int] = Colors.Green,
+        channel3color: Color[int] = Colors.Blue,
         max_color_value: Optional[float] = None,
         max_color_saturation: float = 1.0,
         shared_range: bool = False,
