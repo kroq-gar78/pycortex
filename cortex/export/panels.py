@@ -25,22 +25,14 @@ from ._default_params import (
     params_flatmap_inflated_lateral_medial_ventral
 )
 
-PanelView = TypedDict(
-    "PanelView",
-    {
-        "angle": Union[str, tuple[str, ViewParams]],
-        "surface": Union[str, ViewParams],
-        "hemisphere": NotRequired[str],
-        "zoom": NotRequired[tuple[float, float, float, float]],
-    }
-)
-PanelParams = TypedDict(
-    "PanelParams",
-    {
-        "view": PanelView,
-        "extent": tuple[float, float, float, float],
-    }
-)
+class PanelView(TypedDict):
+    angle: Union[str, tuple[str, ViewParams]]
+    surface: Union[str, ViewParams]
+    hemisphere: NotRequired[str]
+    zoom: NotRequired[tuple[float, float, float, float]]
+class PanelParams(TypedDict):
+    view: PanelView
+    extent: tuple[float, float, float, float]
 
 def plot_panels(
     volume: Union[Volume, Vertex],

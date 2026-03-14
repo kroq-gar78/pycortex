@@ -130,7 +130,7 @@ class DataviewRGB(Dataview):
         return viewnode
 
     def to_json(self, simple=False):
-        sdict = super(DataviewRGB, self).to_json(simple=simple)
+        sdict = super().to_json(simple=simple)
 
         if simple:
             sdict["name"] = self.name
@@ -505,7 +505,7 @@ class VolumeRGB(DataviewRGB):
         else:
             raise ValueError("Cannot handle different transforms per volume")
 
-        super(VolumeRGB, self).__init__(
+        super().__init__(
             subject, alpha, description=description, state=state, priority=priority
         )
 
@@ -536,7 +536,7 @@ class VolumeRGB(DataviewRGB):
         self._alpha = alpha
 
     def to_json(self, simple=False):
-        sdict = super(VolumeRGB, self).to_json(simple=simple)
+        sdict = super().to_json(simple=simple)
         if simple:
             sdict["shape"] = self.red.shape
         else:
@@ -592,7 +592,7 @@ class VolumeRGB(DataviewRGB):
         return "__%s" % _hash(self.volume)[:16]
 
     def _write_hdf(self, h5, name="data"):
-        return super(VolumeRGB, self)._write_hdf(h5, name=name, xfmname=[self.xfmname])
+        return super()._write_hdf(h5, name=name, xfmname=[self.xfmname])
 
     @property
     def raw(self) -> VolumeRGB:
@@ -769,7 +769,7 @@ class VertexRGB(DataviewRGB):
                 self.blue = Vertex(b, subject)
                 self.alpha = alpha
 
-        super(VertexRGB, self).__init__(
+        super().__init__(
             subject, alpha, description=description, state=state, priority=priority
         )
 
@@ -827,7 +827,7 @@ class VertexRGB(DataviewRGB):
         return np.array(verts).transpose([1, 2, 0])
 
     def to_json(self, simple=False):
-        sdict = super(VertexRGB, self).to_json(simple=simple)
+        sdict = super().to_json(simple=simple)
 
         if simple:
             sdict.update(dict(split=self.red.llen, frames=self.vertices.shape[0]))
