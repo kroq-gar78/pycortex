@@ -2,6 +2,7 @@ import binascii
 import copy
 import functools
 import glob
+import html
 import json
 import mimetypes
 import os
@@ -947,3 +948,111 @@ def show(
             pass
 
     return server
+
+
+def _make_iframe_html(
+    url: str,
+    width: Union[int, str]="100%",
+    height: Union[int, str]=720,
+    title: str="Pycortex WebGL Viewer",
+) -> str:
+    """Build an iframe snippet suitable for Jupyter display outputs."""
+    if isinstance(width, int):
+        width_css = f"{width}px"
+    else:
+        width_css = width
+
+    if isinstance(height, int):
+        height_css = f"{height}px"
+    else:
+        height_css = height
+
+    esc_url = html.escape(url, quote=True)
+    esc_title = html.escape(title, quote=True)
+    return (
+        f'<iframe src="{esc_url}" title="{esc_title}" '
+        f'style="width:{width_css};height:{height_css};border:0;display:block;" '
+        'allow="fullscreen"></iframe>'
+    )
+
+
+def show_in_notebook(
+    data: Union[dataset.DatasetLike, dataset.Dataview],
+    width: Union[int, str]="100%",
+    height: Union[int, str]=720,
+    display: bool=True,
+    autoclose: bool=False,
+    open_browser: bool=False,
+    display_url: bool=False,
+    **kwargs,
+) -> tuple[serve.WebApp, str]:
+    """Start an interactive WebGL server and optionally display it inline.
+
+    This helper is intended for local notebook workflows where the viewer should
+    appear in output cells rather than in a separate browser tab.
+
+    Parameters
+    ----------
+    data : Dataset object or implicit Dataset
+        Dataset object containing all data you wish to plot.
+    width : int or str, optional
+        Width of the iframe. Integers are interpreted as pixels.
+    height : int or str, optional
+        Height of the iframe. Integers are interpreted as pixels.
+    display : bool, optional
+        If True, displays an iframe using IPython.display.HTML.
+    autoclose : bool, optional
+        If True, stops the viewer server when all clients disconnect.
+        Defaults to False for notebook sessions that span multiple cells.
+    open_browser : bool, optional
+        Passed through to show(). Defaults to False for notebook usage.
+    display_url : bool, optional
+        Passed through to show(). Defaults to False when embedding inline.
+    **kwargs
+        Additional keyword arguments passed to show().
+
+    Returns
+    -------
+    (server, url) : tuple
+        Running server object and the viewer URL.
+
+    Notes
+    -----
+    Use ``server.get_client()`` after the page connects if you need a live
+    Python handle for controlling the viewer from notebook code.
+    """
+    if ('open_browser' in kwargs and kwargs['open_browser']) or ('display_url' in kwargs and kwargs['display_url']):
+        warnings.warn(
+            "open_browser and display_url are forced to False when using show_in_notebook.",
+            stacklevel=2,
+        )
+
+    server_or_client = show(
+        data,
+        autoclose=autoclose,
+        open_browser=False,
+        display_url=False,
+        **kwargs,
+    )
+
+    if isinstance(server_or_client, serve.WebApp):
+        server = server_or_client
+    else:
+        raise RuntimeError(
+            "show_in_notebook expected show() to return a server; "
+        )
+
+    url = "http://%s%s:%d/mixer.html" % (serve.hostname, domain_name, server.port)
+
+    if display:
+        iframe_html = _make_iframe_html(url, width=width, height=height)
+        try:
+            from IPython.display import HTML, display as ipy_display
+            ipy_display(HTML(iframe_html))
+        except Exception:
+            warnings.warn(
+                "IPython display is unavailable; returning URL for manual use.",
+                stacklevel=2,
+            )
+
+    return server, url

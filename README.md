@@ -67,6 +67,18 @@ In [1]: import cortex
 In [2]: cortex.webshow(cortex.Volume.random("S1", "fullhead"))
 ```
 
+(Experimental) JupyterLab users can also run the demo in a notebook cell using:
+```ipython
+    server, url = cortex.webgl.show_in_notebook(cortex.Volume.random("S1", "fullhead"))
+```
+
+The helper returns the running server object and viewer URL. To control the
+viewer from Python, retrieve a client after the page connects::
+
+    client = server.get_client()
+    client._set_view(azimuth=[180], altitude=[80])
+
+
 Citation
 --------
 If you use pycortex in published work, please cite the [pycortex paper](http://dx.doi.org/10.3389/fninf.2015.00023):

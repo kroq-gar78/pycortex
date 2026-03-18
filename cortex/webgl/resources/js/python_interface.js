@@ -1,5 +1,10 @@
 function Websock() {
-    this.ws = new WebSocket("ws://"+location.host+"/wsconnect/");
+    var wsurl = window.__pycortex_ws_url__; // TODO: remove if not needed by notebook embeds
+    if (wsurl === undefined) {
+        var proto = (location.protocol === "https:") ? "wss://" : "ws://";
+        wsurl = proto + location.host + "/wsconnect/";
+    }
+    this.ws = new WebSocket(wsurl);
     this.ws.onopen = function(evt) {
         this.ws.send("connect");
     }.bind(this);
