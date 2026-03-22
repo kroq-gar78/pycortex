@@ -143,6 +143,8 @@ def _chromium_launch_args(use_gpu_renderer: bool) -> list[str]:
         launch_args.extend([
             "--enable-gpu",
             "--ignore-gpu-blocklist",
+            "--use-gl=egl",
+            "--use-angle=vulkan",
         ])
     else:
         launch_args.append("--use-gl=swiftshader")
