@@ -10,7 +10,7 @@ import subprocess as sp
 import tempfile
 import warnings
 from tempfile import NamedTemporaryFile
-from typing import Optional, Literal, Sequence, Union, cast
+from typing import Optional, Literal, Sequence, Union, cast, TYPE_CHECKING
 
 import nibabel
 import numpy as np
@@ -702,7 +702,7 @@ def mri_surf2surf(data: npt.NDArray, source_subj: str, target_subj: str, hemi: L
             "mri_surf2surf failed").format(exit_code=exit_code))
 
     tf_in.close()
-    output_img = nibabel.load(tf_out.name)
+    output_img = cast(nibabel.GiftiImage, nibabel.load(tf_out.name))
     output_data = np.array([da.data for da in output_img.darrays])
     tf_out.close()
     return output_data
@@ -784,6 +784,8 @@ def get_mri_surf2surf_matrix(source_subj: str, hemi: Literal['lh', 'rh'], surfac
     kdt = KDTree(source_verts)
     print("Getting nearest neighbors")
     distances, indices = kdt.query(transformed_coords.T, k=n_neighbors)
+    if TYPE_CHECKING:
+        assert not isinstance(indices, np.intp)
     print("Done")
 
     rng = (np.random.RandomState(random_state) 
@@ -913,7 +915,7 @@ def show_surf(subject: str, hemi: Literal['lh', 'rh'], type: str, patch: Optiona
     mlab.show()
     return fig, surf
 
-def write_dot(fname: str, pts: npt.NDArray[np.floating], polys: npt.NDArray[np.integer], name: str="test"):
+def write_dot(fname: str, pts: npt.NDArray[np.floating], polys: npt.NDArray[np.integer], name: str="test") -> None:
     """
     """
     import networkx as nx
@@ -955,7 +957,7 @@ def read_dot(fname: str, pts: npt.NDArray[np.floating]) -> npt.NDArray[np.floati
     return data
 
 
-def write_decimated(path: str, pts: npt.NDArray[np.floating], polys: npt.NDArray[np.integer]):
+def write_decimated(path: str, pts: npt.NDArray[np.floating], polys: npt.NDArray[np.integer]) -> None:
     """
     """
     from .polyutils import boundary_edges, decimate
@@ -1109,8 +1111,9 @@ def upsample_to_fsaverage(
     fsaverage, etc.)
     """
 
+    import nibabel.freesurfer # for the type checker
 
-    def get_n_vertices_ico(icoorder):
+    def get_n_vertices_ico(icoorder: int) -> int:
         return 4 ** icoorder * 10 + 2
 
     ico_order = int(data_space[-1])
@@ -1136,6 +1139,8 @@ def upsample_to_fsaverage(
     projected_data = []
     for i, (hemi, dt) in enumerate(zip(hemis, data_hemi)):
         # Load fsaverage sphere for this hemisphere
+        pts: np.ndarray[tuple[int, int], np.dtype[np.float64]]
+        faces: np.ndarray[tuple[int, int], np.dtype[np.int32]]
         pts, faces = nibabel.freesurfer.read_geometry(
             os.path.join(
                 freesurfer_subjects_dir, "fsaverage", "surf", f"{hemi}.sphere.reg"
