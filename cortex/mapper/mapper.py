@@ -17,9 +17,11 @@ import warnings
 
 warnings.simplefilter('ignore', sparse.SparseEfficiencyWarning)
 
+MapperShape = Union[npt.NDArray[np.integer], tuple[int, int, int]]
+
 class Mapper(abc.ABC):
     '''Maps data from epi volume onto surface using various projections'''
-    def __init__(self, left: sparse.csr_matrix, right: sparse.csr_matrix, shape: npt.NDArray[np.integer], subject: str, xfmname: str):
+    def __init__(self, left: sparse.csr_matrix, right: sparse.csr_matrix, shape: MapperShape, subject: str, xfmname: str):
         self.idxmap = None
         self.masks = [left, right]
         self.nverts = left.shape[0] + right.shape[0]
@@ -104,8 +106,7 @@ class Mapper(abc.ABC):
             If Vertex object is provided, a Volume object is returned
             If an array is provided, an array is returned
         '''
-        Vert2Vol = isinstance(vertexdata, dataset.Vertex)
-        if Vert2Vol:
+        if isinstance(vertexdata, dataset.Vertex):
             to_map = vertexdata.data
         else:
             to_map = vertexdata
@@ -115,7 +116,7 @@ class Mapper(abc.ABC):
         partial_vertex = bothmappers.T.dot(to_map)
         # solve the inverse mapping problem
         voxeldata: npt.NDArray = self._get_backmapper().solve(partial_vertex).reshape(self.shape)
-        if Vert2Vol:
+        if isinstance(vertexdata, dataset.Vertex):
             # construct a volume object with the new data
             return dataset.Volume(voxeldata, self.subject, self.xfmname)
         else:
@@ -155,7 +156,7 @@ class Mapper(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def _getmask(cls, coords: npt.NDArray[np.floating], polys: npt.NDArray[np.intp], shape: tuple[int, int, int], **kwargs) -> sparse.csr_matrix:
+    def _getmask(cls, coords: npt.NDArray[np.floating], polys: npt.NDArray[np.integer], shape: tuple[int, int, int], **kwargs) -> sparse.csr_matrix:
         '''Generates a sparse matrix mapping from volume to surface vertices'''
         pass
 
@@ -165,7 +166,7 @@ class Mapper(abc.ABC):
         '''Generates a sparse matrix mapping from volume to surface vertices'''
         pass
 
-def _savecache(filename: str, left: sparse.csr_matrix, right: sparse.csr_matrix, shape: npt.NDArray[np.integer]) -> None:
+def _savecache(filename: str, left: sparse.csr_matrix, right: sparse.csr_matrix, shape: MapperShape) -> None:
     np.savez(filename,
              left_data=left.data,
              left_indices=left.indices,

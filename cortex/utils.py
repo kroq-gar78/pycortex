@@ -366,7 +366,7 @@ def get_cortical_mask(subject: str, xfmname: str, type: str='nearest') -> npt.ND
         dist, idx = get_vox_dist(subject, xfmname)
         return dist < dict(thick=8, thin=2)[type]
     else:
-        return get_mapper(subject, xfmname, type=type).mask
+        return get_mapper(subject, xfmname, maptype=type).mask
 
 
 def get_vox_dist(subject: str, xfmname: str, surface: str="fiducial", max_dist: float=np.inf) -> tuple[npt.NDArray[np.floating], npt.NDArray[np.intp]]:
@@ -434,7 +434,7 @@ def get_hemi_masks(subject, xfmname, type='nearest'):
         that hemisphere's surface vertices.
 
     '''
-    return get_mapper(subject, xfmname, type=type).hemimasks
+    return get_mapper(subject, xfmname, maptype=type).hemimasks
 
 def add_roi(data, name="new_roi", open_inkscape=True, add_path=True,
             overlay_file=None, **kwargs):
@@ -657,7 +657,7 @@ def get_roi_mask(subject, xfmname, roi=None, projection='nearest'):
     """
     warnings.warn('Deprecated! Use get_roi_masks')
 
-    mapper = get_mapper(subject, xfmname, type=projection)
+    mapper = get_mapper(subject, xfmname, maptype=projection)
     rois = get_roi_verts(subject, roi=roi, mask=True)
     output = dict()
     for name, verts in list(rois.items()):
@@ -863,7 +863,7 @@ def get_roi_masks(subject: str, xfmname: str, roi_list: Optional[list[str]]=None
     if (use_cortex_mask or split_lr) or (not return_dict):
         vox_dst, vox_idx = get_vox_dist(subject, xfmname)
     if use_mapper:
-        mapper = get_mapper(subject, xfmname, type=mapper_dict[gm_sampler])
+        mapper = get_mapper(subject, xfmname, maptype=mapper_dict[gm_sampler])
     elif use_cortex_mask:
         if isinstance(gm_sampler, str):
             cortex_mask = db.get_mask(subject, xfmname, type=gm_sampler)

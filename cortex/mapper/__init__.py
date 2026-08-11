@@ -9,7 +9,7 @@ from .mapper import Mapper, _savecache
 from .utils import nanproject, vol2surf
 
 
-def get_mapper(subject: str, xfmname: str, type: str='nearest', recache: bool=False, **kwargs) -> Mapper:
+def get_mapper(subject: str, xfmname: str, maptype: str='nearest', recache: bool=False, **kwargs) -> Mapper:
     """
     Get a Mapper object that projects data between volume and vertex
     (surface) space for the given subject and transform, loading a cached
@@ -21,7 +21,7 @@ def get_mapper(subject: str, xfmname: str, type: str='nearest', recache: bool=Fa
         Subject identifier. Must exist in the pycortex database.
     xfmname : str
         Transform name. Must exist in the pycortex database.
-    type : str, optional
+    maptype : str, optional
         Mapping method to use for projecting between volume and surface
         space. One of 'nearest', 'trilinear', 'gaussian', 'lanczos',
         'const_patch_nn', 'const_patch_trilin', 'const_patch_lanczos',
@@ -32,13 +32,13 @@ def get_mapper(subject: str, xfmname: str, type: str='nearest', recache: bool=Fa
         Default is False.
     **kwargs
         Extra keyword arguments are passed to the chosen mapper's sampling
-        function, and which ones matter depends on `type`:
+        function, and which ones matter depends on `maptype`:
             sigma : float (default 1)
                 Standard deviation of the gaussian kernel. Only used when
-                type='gaussian'.
+                maptype='gaussian'.
             window : int (default 3)
-                Kernel window size, in voxels. Used when type='gaussian' or
-                type='lanczos'.
+                Kernel window size, in voxels. Used when maptype='gaussian' or
+                maptype='lanczos'.
             npts : int (default 64)
                 Number of random sample points per patch/line segment. Used
                 by the 'const_patch_*' and 'line_*' types.
@@ -67,7 +67,7 @@ def get_mapper(subject: str, xfmname: str, type: str='nearest', recache: bool=Fa
         line_nearest=line.LineNN,
         line_trilinear=line.LineTrilin,
         line_lanczos=line.LineLanczos)
-    Map = mapcls[type]
+    Map = mapcls[maptype]
     ptype = Map.__name__.lower()
     kwds ='_'.join(['%s%s'%(k,str(v)) for k, v in list(kwargs.items())])
     if len(kwds) > 0:
