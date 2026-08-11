@@ -133,7 +133,8 @@ def plot_panels(
         angles_and_surfaces = list(set(angles_and_surfaces))
     list_angles: list[Union[str, tuple[str, ViewParams]]]
     list_surfaces: list[Union[str, ViewParams]]
-    list_angles, list_surfaces = list(zip(*angles_and_surfaces))
+    angles_col, surfaces_col = zip(*angles_and_surfaces)
+    list_angles, list_surfaces = list(angles_col), list(surfaces_col)
 
     # create all images
     temp_dir = tempfile.mkdtemp()
