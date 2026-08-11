@@ -136,7 +136,7 @@ def _pack_png(mosaic: Union[npt.NDArray[np.float32], npt.NDArray[np.uint8]]) -> 
         raise TypeError
 
     y, x = mosaic.shape[:2]
-    im = Image.frombuffer("RGBA", (x, y), mosaic.data, "raw", "RGBA", 0, 1)
+    im = Image.frombuffer("RGBA", (x, y), mosaic.tobytes(), "raw", "RGBA", 0, 1)
     im.save(buf, format="PNG")
     buf.seek(0)
     return buf.read()
