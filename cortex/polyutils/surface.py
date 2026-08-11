@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from collections import OrderedDict
-from typing import Iterator, Optional, Union, overload
+from typing import Any, Callable, Iterator, Optional, Union, overload
 
 import numpy as np
 import numpy.typing as npt
@@ -15,7 +15,7 @@ try:
 except ImportError:
     # This API was deprecated in SciPy 1.8.0.
     # https://docs.scipy.org/doc/scipy-1.16.1/release/1.8.0-notes.html#clear-split-between-public-and-private-api
-    from scipy.sparse.linalg.dsolve import factorized as _factorized
+    from scipy.sparse.linalg.dsolve import factorized as _factorized  # type: ignore[no-redef]
 
 from . import exact_geodesic
 from . import subsurface
@@ -38,11 +38,11 @@ class Surface(exact_geodesic.ExactGeodesicMixin, subsurface.SubsurfaceMixin):
     """
     def __init__(self, pts: npt.NDArray[np.floating], polys: npt.NDArray[np.integer]) -> None:
         self.pts = pts.astype(np.double)
-        self.polys = polys
+        self.polys = np.asarray(polys, dtype=np.intp)
 
-        self._cache = dict()
-        self._rlfac_solvers = dict()
-        self._nLC_solvers = dict()
+        self._cache: dict[int, Any] = dict()
+        self._rlfac_solvers: dict[float, Callable[[npt.NDArray], npt.NDArray]] = dict()
+        self._nLC_solvers: dict[float, Callable[[npt.NDArray], npt.NDArray]] = dict()
 
     @property
     @_memo
@@ -53,13 +53,13 @@ class Surface(exact_geodesic.ExactGeodesicMixin, subsurface.SubsurfaceMixin):
     
     @property
     @_memo
-    def connected(self) -> sparse.coo_matrix:
+    def connected(self) -> sparse.csr_matrix:
         """Sparse matrix of vertex-face associations.
         """
         npt = len(self.pts)
         npoly = len(self.polys)
         return sparse.coo_matrix((np.ones((3*npoly,)), # data
-                                  (np.hstack(self.polys.T), # row
+                                  (np.hstack(tuple(self.polys.T)), # row
                                    np.tile(range(npoly),(1,3)).squeeze())), # col
                                  (npt, npoly)).tocsr() # size
     @property
@@ -832,11 +832,12 @@ class Surface(exact_geodesic.ExactGeodesicMixin, subsurface.SubsurfaceMixin):
 
         ptmap: dict[int, int] = dict()
         queue = [node]
-        faces = set()
+        faces: set[int] = set()
         visited = set([node])
         while len(faces) < nfaces and len(queue) > 0:
             node = queue.pop(0)
             for face in self.connected[node].indices:
+                face = int(face)
                 if face not in faces:
                     faces.add(face)
                     pt: int # NOTE: this is actually probably np.intp
@@ -999,6 +1000,7 @@ class Surface(exact_geodesic.ExactGeodesicMixin, subsurface.SubsurfaceMixin):
             stack = np.vstack([mid, left, right, pts[p]])
             return stack[(distance.cdist(stack, stack) == 0).sum(0) == 1]
 
+        facerow: sparse.csr_matrix
         for p, facerow in enumerate(self.connected):
             faces = facerow.indices
             if len(faces) > 0:
