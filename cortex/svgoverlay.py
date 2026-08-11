@@ -194,7 +194,7 @@ class SVGOverlay:
         print('Saved SVG to: %s'%filename)
 
     def get_texture(self, layer_name: str, height: Optional[Union[int, float]], name: Optional[str]=None, background: Optional[str]=None, labels: bool=True,
-        shape_list: Optional[Sequence[str]]=None, shadow: Optional[float]=None, **kwargs: str) -> npt.NDArray:
+        shape_list: Optional[Sequence[str]]=None, shadow: Optional[float]=None, **kwargs: Optional[Union[str, float, list[float]]]) -> npt.NDArray:
         """Renders a specific layer of this svgobject as a png
 
         Parameters

@@ -222,7 +222,7 @@ def add_rois(fig: Axes, dataview: dataset.Dataview, extents: Optional[tuple[floa
     svg_kws = _convert_svg_kwargs(kwargs)
     layer_kws = _parse_defaults('rois_paths')
     layer_kws.update(svg_kws)
-    im = svgobject.get_texture('rois', height, labels=with_labels, shape_list=roi_list, shadow=shadow, **layer_kws)
+    im = svgobject.get_texture('rois', height, labels=with_labels, shape_list=roi_list, shadow=shadow, **layer_kws)  # type: ignore[arg-type]
     _, ax = _get_fig_and_ax(fig)
     img = ax.imshow(im,
                     aspect='equal',
@@ -270,7 +270,7 @@ def add_sulci(fig: Axes, dataview: dataset.Dataview, extents: Optional[tuple[flo
     svg_kws = _convert_svg_kwargs(kwargs)
     layer_kws = _parse_defaults('sulci_paths')
     layer_kws.update(svg_kws)
-    sulc = svgobject.get_texture('sulci', height, labels=with_labels, shape_list=sulci_list, shadow=shadow, **layer_kws)
+    sulc = svgobject.get_texture('sulci', height, labels=with_labels, shape_list=sulci_list, shadow=shadow, **layer_kws)  # type: ignore[arg-type]
     if extents is None:
         extents = _get_extents(fig)
     _, ax = _get_fig_and_ax(fig)
