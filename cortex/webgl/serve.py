@@ -16,7 +16,7 @@ import mimetypes
 import functools
 import threading
 
-from typing import Callable, Literal, cast, Generic, Union, Any
+from typing import Callable, Literal, Optional, cast, Generic, Union, Any
 
 if sys.version_info < (3, 10):
     from typing_extensions import ParamSpec
@@ -105,7 +105,7 @@ class StaticFileHandler(tornado.web.RequestHandler):
 
     CACHE_MAX_AGE = 86400 * 365 * 10  # 10 years
 
-    _static_hashes = {}
+    _static_hashes: dict[str, Optional[str]] = {}
 
     def initialize(self, path, default_filename=None):
         self.root = os.path.abspath(path) + os.path.sep
@@ -453,7 +453,7 @@ class JSProxy(Generic[P]):
         if return_value is None or not isinstance(return_value, dict):
             time.sleep(0.1)
             return_value = self.send(method="query", params=[self.name])[0]
-        return cast(dict[str, JSON], return_value)
+        return cast(dict[str, Union[list[str], list[Union[str, Any]]]], return_value)
 
     def __getattr__(self, attr: str) -> Union["JSProxy", Any]:
         # if attr == 'attrs':
@@ -501,7 +501,7 @@ class JSProxy(Generic[P]):
 
     def __getitem__(self, idx: Union[int, str]) -> "JSProxy":
         assert not isinstance(idx, (slice, list, tuple, np.ndarray))
-        return JSProxy(self.send, "%s.%d" % (self.name, idx))
+        return JSProxy(self.send, "%s.%s" % (self.name, idx))
 
 
 if __name__ == "__main__":
