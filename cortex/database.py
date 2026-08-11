@@ -699,7 +699,7 @@ class Database:
         if not os.path.exists(shared_voxel_file) or recache:
             print('Shared voxel array not found, generating...')
             from .utils import get_shared_voxels as _get_shared_voxels
-            voxels = _get_shared_voxels(subject, xfmname, hemi=hemi, merge=merge, use_astar=use_astar)
+            voxels = _get_shared_voxels(subject, xfmname, hemi=hemi, merge=merge, use_astar=use_astar)  # type: ignore[call-overload]
             np.save(shared_voxel_file, voxels)
             return voxels
         else:
@@ -931,7 +931,7 @@ class Database:
         if template is None:
             templatehash = "default"
         else:
-            templatehash = sha1(template).hexdigest()
+            templatehash = sha1(template.encode()).hexdigest()
 
         # Check cache first
         mnixfmfile = os.path.join(self.get_cache(subject), "mni_xfm-%s-%s.txt"%(xfm, templatehash))
