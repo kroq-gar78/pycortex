@@ -263,6 +263,8 @@ def cut_surface(
     """
 
     # Flatten
+    path_type: Literal['patch', 'surf', 'curv', 'slim']
+    flat_type: Literal['freesurfer', 'slim', 'blender']
     if flatten_with == "blender":
         assert method is not None, "method must be provided when using blender"
 
@@ -299,7 +301,7 @@ def cut_surface(
             freesurfer_subject_dir=freesurfer_subject_dir,
             **kwargs,
         )
-        path_type, flat_type = "slip", "slim" # TODO: possible typo. "slip" vs "slim"
+        path_type, flat_type = "slim", "slim"
     else:
         raise ValueError(f"Invalid flatten_with: {flatten_with}")
 
@@ -334,7 +336,7 @@ def flatten_slim(
     freesurfer_subject_dir: Optional[str] = None,
     slim_path: str = default_slim_path,
     do_flatten: Optional[bool] = None,
-) -> None:
+) -> bool:
     """Flatten brain w/ slim object flattening
 
     Parameters
@@ -375,7 +377,7 @@ def flatten_slim(
         do_flatten = resp.lower() in ("y", "yes")
     if not do_flatten:
         print("Not flattening...")
-        return
+        return False
 
     # File paths
     if freesurfer_subject_dir is None:
@@ -450,7 +452,7 @@ def flatten_slim(
     # fname = surfpath.format(hemi=hemi)
     # print("Writing %s"%fname)
     formats.write_obj(obj_out.replace("_slim", ".flat_slim"), pts=pts_flat, polys=polys)
-    return
+    return True
 
 
 def show_surface(
