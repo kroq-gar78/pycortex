@@ -979,7 +979,7 @@ def get_dropout(subject: str, xfmname: str, power: float = 20):
         Pycortex volume of low signal locations
     """
     xfm = db.get_xfm(subject, xfmname)
-    rawdata = xfm.reference.get_fdata().T.astype(np.float32)
+    rawdata = xfm.reference_nifti.get_fdata().T.astype(np.float32)
 
     # Collapse epi across time if it's 4D
     if rawdata.ndim > 3:
