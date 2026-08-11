@@ -46,6 +46,7 @@ def _embed_js(dom: Document, script: Element, rootdirs: Sequence[str]) -> None:
             wscript.setAttribute(u"type", u"text/js-worker")
             wscript.setAttribute(u"id", wid)
             wscript.appendChild(dom.createTextNode(wtext))
+            assert script.parentNode is not None
             script.parentNode.insertBefore(wscript, script)
             rplc = u"window.URL.createObjectURL(new Blob([document.getElementById('%s').textContent]))"%wid
             jssrc = jssrc.replace(worker, rplc)
