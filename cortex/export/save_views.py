@@ -22,6 +22,8 @@ ViewParams = TypedDict(
         "surface.{subject}.lighting.specularity": float,
         "surface.{subject}.lighting.uniform_illumination": float,
         "surface.{subject}.lighting.topleft_lighting": float,
+        "surface.{subject}.sampler": str,
+        "surface.{subject}.layers": int,
     },
     total=False,
 )
@@ -125,13 +127,14 @@ def save_3d_views(
             time.sleep(sleep)
 
         # Add interpolation and layers params only if we have a volume
+        interpolation_params: ViewParams
         if isinstance(volume, (cortex.Volume, cortex.Volume2D, cortex.VolumeRGB)):
             interpolation_params = {
                 "surface.{subject}.sampler": interpolation,
                 "surface.{subject}.layers": layers,
             }
         else:
-            interpolation_params = dict()
+            interpolation_params = {}
 
         has_flatmap = hasattr(getattr(cortex.db, volume.subject).surfaces, "flat")
         file_names: list[str] = []
