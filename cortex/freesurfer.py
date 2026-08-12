@@ -1383,7 +1383,7 @@ def write_decimated(path: str, pts: npt.NDArray[np.floating], polys: npt.NDArray
     data['x'] = dpts[:,0]
     data['y'] = dpts[:,1]
     data['z'] = dpts[:,2]
-    with open(path+'.full.patch.3d', 'w') as fp:
+    with open(path+'.full.patch.3d', 'wb') as fp:
         fp.write(struct.pack('>i', -1))
         fp.write(struct.pack('>i', len(dpts)))
         fp.write(data.tobytes())
@@ -1420,7 +1420,7 @@ class SpringLayout:
         self.stepsize = stepsize
         pinmask = np.zeros((len(pts),), dtype=bool)
         if isinstance(pins, (list, set, np.ndarray)):
-            pinmask[pins] = True
+            pinmask[list(pins)] = True
         self.pins = pinmask
         self.neighbors = [set() for _ in range(len(pts))]
 
