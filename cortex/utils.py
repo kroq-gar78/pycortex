@@ -34,13 +34,17 @@ from .polyutils import Surface
 from .testing_utils import INKSCAPE_PATH, INKSCAPE_VERSION
 from .volume import anat2epispace
 
-# register_cmap is deprecated in matplotlib > 3.7.0 and replaced by colormaps.register
+# register_cmap/get_cmap are deprecated in matplotlib > 3.7.0 and replaced by
+# colormaps.register / colormaps[name]
 try:
     from matplotlib import colormaps as cm
     def register_cmap(cmap):
         return cm.register(cmap)
+    def _lookup_cmap(name):
+        return cm[name]
 except ImportError:
     from matplotlib.cm import register_cmap
+    from matplotlib.cm import get_cmap as _lookup_cmap
 
 P = ParamSpec('P')
 T = TypeVar('T')
@@ -1259,7 +1263,7 @@ def get_cmap(name: str):
             print(f"Color map {name} is already registered.")
     else:
         try:
-            cmap = plt.cm.get_cmap(name)
+            cmap = _lookup_cmap(name)
         except:
             raise Exception('Unknown color map!')
     return cmap
