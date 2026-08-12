@@ -699,7 +699,7 @@ class Database:
         if not os.path.exists(shared_voxel_file) or recache:
             print('Shared voxel array not found, generating...')
             from .utils import get_shared_voxels as _get_shared_voxels
-            voxels = _get_shared_voxels(subject, xfmname, hemi=hemi, merge=merge, use_astar=use_astar)  # type: ignore[call-overload]
+            voxels = _get_shared_voxels(subject, xfmname, hemi=hemi, merge=merge, use_astar=use_astar)
             np.save(shared_voxel_file, voxels)
             return voxels
         else:
