@@ -276,7 +276,7 @@ class SVGOverlay:
                     # Set visibility of labels (by setting text alpha to 0)
                     # This could be less baroque, but text elements currently
                     # do not have individually settable visibility / style params
-                    tmp_style = copy.deepcopy(layer.labels.text_style)
+                    tmp_style: dict[str, Any] = copy.deepcopy(layer.labels.text_style)
                     tmp_style['fill-opacity'] = '1' if shape_.visible else '0'
                     tmp_style.update(label_kwargs)
                     tmp_style_str = ';'.join(['%s:%s'%(k,v) for k, v in tmp_style.items() if v != 'None'])
