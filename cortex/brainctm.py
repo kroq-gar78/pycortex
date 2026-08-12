@@ -32,6 +32,9 @@ class BrainCTM:
     def __init__(self, subject: str, decimate: bool=False) -> None:
         self.subject = subject
         self.types: list[str] = []
+        self.left: Hemi
+        self.right: Hemi
+        self.flatlims: Optional[tuple[list[float], list[float]]]
 
         left, right = db.get_surf(subject, "fiducial")
         try:
@@ -40,6 +43,7 @@ class BrainCTM:
             fleft, fright = None, None
 
         if decimate:
+            assert fleft is not None and fright is not None, "Decimation requires a flatmap"
             try:
                 pleft, pright = db.get_surf(subject, "pia")
                 self.left = DecimatedHemi(left[0], left[1], fleft[1], pia=pleft[0])
@@ -62,14 +66,14 @@ class BrainCTM:
             if fleft is not None:
                 assert fright is not None
                 #set medial wall
-                for hemi, ptpoly in ([self.left, fleft], [self.right, fright]):
+                for hemi, ptpoly in ((self.left, fleft), (self.right, fright)):
                     # fidpolys = set(tuple(f) for f in polyutils.sort_polys(hemi.polys))
                     # flatpolys = set(tuple(f) for f in polyutils.sort_polys(ptpoly[1]))
                     # medial_verts = set(np.ravel(list(fidpolys - flatpolys)))
                     medial_verts = set(hemi.polys.ravel()) - set(ptpoly[1].ravel())
                     hemi.aux[list(medial_verts), 0] = 1
 
-                    connected = [set() for _ in range(len(ptpoly[0]))]
+                    connected: list[set[np.integer]] = [set() for _ in range(len(ptpoly[0]))]
                     for p1, p2, p3 in hemi.polys:
                         if p1 not in medial_verts:
                             connected[p2].add(p1)
@@ -112,8 +116,8 @@ class BrainCTM:
         npz = db.get_surfinfo(self.subject, type='curvature', **kwargs)
         try:
             # TODO: test for DecimatedHemi instead of try/except
-            self.left.aux[:,1] = npz.left[self.left.mask]
-            self.right.aux[:,1] = npz.right[self.right.mask]
+            self.left.aux[:,1] = npz.left[self.left.mask]  # type: ignore[attr-defined]
+            self.right.aux[:,1] = npz.right[self.right.mask]  # type: ignore[attr-defined]
         except AttributeError:
             self.left.aux[:,1] = npz.left
             self.right.aux[:,1] = npz.right
@@ -169,12 +173,12 @@ class BrainCTM:
                 diff: npt.NDArray[np.floating]
                 idx: npt.NDArray[np.integer] # TODO: is this an array or a scalar?
                 kdt = cKDTree(hemi.pts)
-                diff, idx = kdt.query(pts)
+                diff, idx = cast(tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]], kdt.query(pts))
                 ptmap.append(idx)
                 inverse.append(idx.argsort())
         else:
             # TODO: use indexable type for ptmap and inverse
-            ptmap = inverse = np.arange(len(self.left.ctm)), np.arange(len(self.right.ctm))
+            ptmap = inverse = [np.arange(len(self.left.ctm)), np.arange(len(self.right.ctm))]
 
         np.savez(mapname, 
             index=np.hstack([ptmap[0], ptmap[1]+len(ptmap[0])]), 
@@ -197,13 +201,13 @@ class BrainCTM:
             with open(svgname, "wb") as fp:
                 for element in svg.svg.findall(".//{http://www.w3.org/2000/svg}text"):
                     if 'data-ptidx' in element.attrib:
-                        idx = int(element.attrib["data-ptidx"])
-                        if idx < len(inverse[0]):
-                            idx = inverse[0][idx]
+                        vidx = int(element.attrib["data-ptidx"])
+                        if vidx < len(inverse[0]):
+                            vidx = inverse[0][vidx]
                         else:
-                            idx -= len(inverse[0])
-                            idx = inverse[1][idx] + len(inverse[0])
-                        element.attrib["data-ptidx"] = str(idx)
+                            vidx -= len(inverse[0])
+                            vidx = inverse[1][vidx] + len(inverse[0])
+                        element.attrib["data-ptidx"] = str(vidx)
                 fp.write(svg.toxml())
         return ptmap
 
@@ -222,8 +226,8 @@ class Hemi:
 
         self.pts = pts
         self.polys = polys
-        self.flat = None
-        self.surfs = {}
+        self.flat: Optional[npt.NDArray[np.floating]] = None
+        self.surfs: dict[str, npt.NDArray[np.floating]] = {}
         self.aux = np.zeros((len(self.ctm), 4))
 
     def addSurf(self, pts: npt.NDArray[np.floating], name: str, renorm: bool=True) -> None:
