@@ -329,19 +329,22 @@ class SVGOverlay:
         if background is not None:
             self.svg.getroot().remove(img)
 
-        if name is None:
-            assert pngfile is not None
-            try:
-                im = plt.imread(pngfile)
-            except SyntaxError as e:
+        # With `name`, the png is the caller's file to keep; without it, the
+        # temporary file is ours to delete once read.
+        assert pngfile is not None
+        try:
+            im = plt.imread(pngfile)
+        except SyntaxError as e:
+            if name is None:
                 os.unlink(pngfile)
-                raise RuntimeError(f"Error reading image from {pngfile}: {e}"
-                                   f" (inkscape version: {INKSCAPE_VERSION})"
-                                   f" (inkscape command: {inkscape_cmd})"
-                                   f" (stdout: {stdout})"
-                                   f" (stderr: {stderr})")
+            raise RuntimeError(f"Error reading image from {pngfile}: {e}"
+                               f" (inkscape version: {INKSCAPE_VERSION})"
+                               f" (inkscape command: {inkscape_cmd})"
+                               f" (stdout: {stdout})"
+                               f" (stderr: {stderr})")
+        if name is None:
             os.unlink(pngfile)
-            return im
+        return im
 
 class Overlay:
     """Class to represent a single layer of an SVG file
@@ -470,7 +473,7 @@ class Labels:
 
         labels = self.override
         if override:
-            labels = self.labels.findall(".//{%s}text"%svgns)
+            labels = self.layer.findall(".//{%s}text"%svgns)
 
         for element in labels:
             element.attrib['style'] = text_style
@@ -876,7 +879,7 @@ def _parse_svg_pts(datastr: str) -> npt.NDArray[np.floating]:
         elif mode == 'm' :
             offset += list([float(x) for x in [data.pop(0), data.pop(0)]])
         elif mode == 'M' :
-            offset = list([float(x) for x in [data.pop(0), data.pop(0)]])
+            offset = np.array(list([float(x) for x in [data.pop(0), data.pop(0)]]))
 
         ## Check to see if nothing has happened, and, if so, fail
         if len(data) == lastlen:
