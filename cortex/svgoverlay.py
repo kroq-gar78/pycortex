@@ -13,7 +13,7 @@ import numpy.typing as npt
 import subprocess as sp
 from matplotlib.path import Path
 from scipy.spatial import cKDTree
-from typing import Any, Iterator, Union, overload, Literal, Optional, Sequence
+from typing import Any, Iterable, Iterator, Union, overload, Literal, Optional, Sequence
 
 from looseversion import LooseVersion
 
@@ -49,7 +49,7 @@ class SVGOverlay:
         list of layers of svg file to extract. If None, extracts all overlay layers 
         (i.e. all layers that do not contain images)
     """
-    def __init__(self, svgfile: str, coords: Optional[npt.NDArray]=None, overlays_available: Optional[list[str]]=None):
+    def __init__(self, svgfile: str, coords: Optional[npt.NDArray]=None, overlays_available: Optional[Container[str]]=None):
         self.svgfile = svgfile
         self.overlays_available = overlays_available
         self.reload()
@@ -95,6 +95,7 @@ class SVGOverlay:
         for layer in self:
             for name in layer.labels.elements:
                 for element in layer.labels.elements[name]:
+                    assert isinstance(element, _Element)
                     x, y = float(element.get("x")), float(element.get("y"))
                     dist, idx = self.kdt.query((x, self.svgshape[1]-y))
                     if idx >= len(self.kdt.data):
@@ -156,11 +157,14 @@ class SVGOverlay:
         outsvg = self.svg
 
         if with_ims is not None:
+            im_pairs: Iterable[tuple[int, bytes]]
             if isinstance(with_ims, (list, tuple)):
-                with_ims = zip(range(len(with_ims)), with_ims)
+                im_pairs = zip(range(len(with_ims)), with_ims)
+            else:
+                im_pairs = with_ims  # type: ignore[assignment]
 
             datalayer = _make_layer(outsvg.getroot(), "data")
-            for imnum, im in reversed(list(with_ims)):  # need list() with zip for python 3.5 compatibility
+            for imnum, im in reversed(list(im_pairs)):  # need list() with zip for python 3.5 compatibility
                 imlayer = _make_layer(datalayer, "image_%d" % imnum)
                 img = E.image(
                     {"{http://www.w3.org/1999/xlink}href":"data:image/png;base64,%s"%str(im,'utf-8')},
@@ -184,11 +188,14 @@ class SVGOverlay:
                     tmp_style['fill-opacity'] = '1' if labels else '0'
                     tmp_style_str = ';'.join(['%s:%s'%(k,v) for k, v in tmp_style.items() if v != 'None'])
                     for i in range(len(layer.labels.elements[name_])):
-                        layer.labels.elements[name_][i].set('style', tmp_style_str)
+                        element = layer.labels.elements[name_][i]
+                        assert isinstance(element, _Element)
+                        element.set('style', tmp_style_str)
             else:
                 layer.visible = False
                 layer.labels.visible = False
 
+        assert filename is not None
         with open(filename, "wb") as outfile:
             outfile.write(etree.tostring(outsvg))
         print('Saved SVG to: %s'%filename)
@@ -281,7 +288,9 @@ class SVGOverlay:
                     tmp_style.update(label_kwargs)
                     tmp_style_str = ';'.join(['%s:%s'%(k,v) for k, v in tmp_style.items() if v != 'None'])
                     for i in range(len(layer.labels.elements[name_])):
-                        layer.labels.elements[name_][i].set('style', tmp_style_str)
+                        element = layer.labels.elements[name_][i]
+                        assert isinstance(element, _Element)
+                        element.set('style', tmp_style_str)
                 layer.set(**kwargs)
             else:
                 layer.visible = False
@@ -312,7 +321,8 @@ class SVGOverlay:
             cmd = [inkscape_cmd, '-h', str(height), '--export-filename', pngfile, svgfile]
         try:
             proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
-            stdout, stderr = proc.communicate()
+            stdout_bytes, stderr_bytes = proc.communicate()
+            stdout, stderr = stdout_bytes.decode(), stderr_bytes.decode()
         finally:
             os.unlink(svgfile)
         
@@ -320,8 +330,6 @@ class SVGOverlay:
             'Format autodetect failed.',
             "Failed to wrap object of type 'GtkRecentManager'.",
         ]
-        if hasattr(stderr, 'decode'):
-            stderr = stderr.decode()
         for line in stderr.split('\n'):
             if line != '' and not any(warning in line for warning in suppressed_warnings):
                 print(line)
@@ -432,7 +440,10 @@ class Labels:
         text_style = ';'.join(['%s:%s'%(k,v) for k, v in text_style if v != 'None'])
 
         #generate a list of labels that should be in the layer
-        self.elements = dict()
+        # A position starts out as an ndarray (the raw label coordinate) and is
+        # replaced in-place with the matching/created svg text element below, so
+        # by the time __init__ returns every entry is a _Element, never an ndarray.
+        self.elements: dict[str, list[Union[npt.NDArray, _Element]]] = dict()
         for shape in self.overlay.shapes.values():
             self.elements[shape.name] = shape.get_labelpos()
 
@@ -534,7 +545,7 @@ class Shape:
             # No splines defined for this (ROI). Wut.
             import warnings
             warnings.warn("Requested layer in svg file (%s) contains no splines"%self.name)
-            return []
+            return np.array([], dtype=np.intp)
         # Annoying: The paths created are upside-down wrt vertex coordinates. So flip them.
         verts_upside_down = copy.copy(vts)
         verts_upside_down[:, 1] = self.height - verts_upside_down[:, 1]
@@ -862,13 +873,13 @@ def _parse_svg_pts(datastr: str) -> npt.NDArray[np.floating]:
         elif mode == "L":
             offset = np.array(list([float(x) for x in [data.pop(0), data.pop(0)]]))
         elif mode == "h":
-            offset += list([float(x) for x in [data.pop(0), 0]])
+            offset += list([float(x) for x in (data.pop(0), 0)])
         elif mode == 'H':
-            offset = np.array(list([float(x) for x in [data.pop(0), 0]]))
+            offset = np.array(list([float(x) for x in (data.pop(0), 0)]))
         elif mode == "v":
-            offset += list([float(x) for x in [0, data.pop(0)]])
+            offset += list([float(x) for x in (0, data.pop(0))])
         elif mode == "V":
-            offset = np.array(list([float(x) for x in [0, data.pop(0)]]))
+            offset = np.array(list([float(x) for x in (0, data.pop(0))]))
         elif mode == "c":
             data = data[4:]
             offset += list([float(x) for x in [data.pop(0), data.pop(0)]])
@@ -937,8 +948,10 @@ def import_roi(roifile: str, outfile: str) -> None:
 
 def gen_path(path: _Element) -> Path:
     mdict = dict(m=Path.MOVETO, l=Path.LINETO, h=Path.LINETO, v=Path.LINETO)
-    verts, codes = [], []
-    mode, pen = None, np.array([0.,0.])
+    verts: list[Any] = []
+    codes: list[Any] = []
+    mode: Optional[str] = None
+    pen = np.array([0.,0.])
 
     it = iter(path.get('d').strip().split(' '))
     run = True
@@ -950,42 +963,44 @@ def gen_path(path: _Element) -> Path:
                 if cmd.lower() == 'z':
                     verts.append([0,0])
                     codes.append(Path.CLOSEPOLY)
-            elif mode.lower() == 'c':
-                p1 = [float(ss) for ss in cmd.split(',')]
-                p2 = [float(ss) for ss in next(it).split(',')]
-                p3 = [float(ss) for ss in next(it).split(',')]
-                if mode == 'c':
-                    verts.append(pen + p1)
-                    verts.append(pen + p2)
-                    verts.append(pen + p3)
-                    pen += p3
-                else:
-                    verts.append(p1)
-                    verts.append(p2)
-                    verts.append(p3)
-                    pen = np.array(p3)
-                codes.append(Path.CURVE4)
-                codes.append(Path.CURVE4)
-                codes.append(Path.CURVE4)
             else:
-                if mode.lower() == 'h':
-                    val = [float(cmd), 0]
-                elif mode.lower() == 'v':
-                    val = [0, float(cmd)]
+                assert mode is not None
+                if mode.lower() == 'c':
+                    p1 = [float(ss) for ss in cmd.split(',')]
+                    p2 = [float(ss) for ss in next(it).split(',')]
+                    p3 = [float(ss) for ss in next(it).split(',')]
+                    if mode == 'c':
+                        verts.append(pen + p1)
+                        verts.append(pen + p2)
+                        verts.append(pen + p3)
+                        pen += p3
+                    else:
+                        verts.append(p1)
+                        verts.append(p2)
+                        verts.append(p3)
+                        pen = np.array(p3)
+                    codes.append(Path.CURVE4)
+                    codes.append(Path.CURVE4)
+                    codes.append(Path.CURVE4)
                 else:
-                    val = [float(cc) for cc in cmd.split(',')]
-                codes.append(mdict[mode.lower()])
-                if mode.lower() == mode:
-                    pen += val
-                    verts.append(pen.tolist())
-                else:
-                    pen = np.array(val)
-                    verts.append(val)
+                    if mode.lower() == 'h':
+                        val = [float(cmd), 0]
+                    elif mode.lower() == 'v':
+                        val = [0, float(cmd)]
+                    else:
+                        val = [float(cc) for cc in cmd.split(',')]
+                    codes.append(mdict[mode.lower()])
+                    if mode.lower() == mode:
+                        pen += val
+                        verts.append(pen.tolist())
+                    else:
+                        pen = np.array(val)
+                        verts.append(val)
 
-                if mode == 'm':
-                    mode = 'l'
-                elif mode == 'M':
-                    mode = 'L'
+                    if mode == 'm':
+                        mode = 'l'
+                    elif mode == 'M':
+                        mode = 'L'
 
         except StopIteration:
             run = False
