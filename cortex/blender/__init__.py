@@ -13,6 +13,7 @@ import numpy as np
 from .. import options
 from .. import freesurfer
 from .. import dataset
+from ..dataset.braindata import VertexData, VolumeData
 from .. import utils 
 
 default_blender = options.config.get('dependency_paths', 'blender')
@@ -175,8 +176,11 @@ def add_cutdata(fname: str, braindata: Union[dataset.Dataset, dataset.Dataview],
             add_cutdata(fname, data, name=view_name, projection=projection, mesh=mesh)
         return
     braindata = dataset.normalize(braindata)
-    if not isinstance(braindata, dataset.braindata.VertexData):
+    if not isinstance(braindata, VertexData):
+        # TODO: does this work for Volume2D/VolumeRGB?
+        assert isinstance(braindata, VolumeData) # NOTE: temporary until BrainData hierarchy is clearer
         mapped = braindata.map(projection)
+        assert isinstance(mapped, VertexData) # map() converts VolumeData to a VertexData subclass
     else:
         mapped = braindata
     left = mapped.left
@@ -185,6 +189,8 @@ def add_cutdata(fname: str, braindata: Union[dataset.Dataset, dataset.Dataview],
     cmap = utils.get_cmap(braindata.cmap)
     vmin = braindata.vmin
     vmax = braindata.vmax
+    if vmin is None or vmax is None:
+        raise ValueError("braindata must have vmin and vmax set")
     lcolor = cmap((left - vmin) / (vmax - vmin))[:,:3]
     rcolor = cmap((right - vmin) / (vmax - vmin))[:,:3]
 
