@@ -547,11 +547,11 @@ def make_fiducial(fs_subject: str, freesurfer_subject_dir: Optional[str]=None) -
         environment variable $SUBJECTS_DIR if None).
     """
     hemi: Literal['lh', 'rh']
-    for hemi in ['lh', 'rh']: # TODO: why is this a type error?
+    for hemi in ('lh', 'rh'):
         spts, polys, _ = get_surf(fs_subject, hemi, "smoothwm", freesurfer_subject_dir=freesurfer_subject_dir)
         ppts, _, _ = get_surf(fs_subject, hemi, "pial", freesurfer_subject_dir=freesurfer_subject_dir)
         fname = get_paths(fs_subject, hemi, "surf", freesurfer_subject_dir=freesurfer_subject_dir).format(name="fiducial")
-        write_surf(fname, (spts + ppts) / 2, polys)
+        write_surf(fname, ((spts + ppts) / 2.), polys)
 
 
 def parse_surf(filename: str) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.int32]]:
@@ -737,11 +737,12 @@ def get_surf(subject: str, hemi: Literal['lh', 'rh'], type: str, patch: Optional
         idx[edges] = True
         valid = idx[polys.ravel()].reshape(-1, 3).all(1)
         polys = polys[valid]
-        idx = np.zeros((len(pts),))
+        idx = np.zeros((len(pts),), dtype=np.float32)
         idx[verts] = 1
         idx[edges] = -1
 
     if type == "patch":
+        assert patch is not None
         for i, x in enumerate(['x', 'y', 'z']):
             pts[verts, i] = patch[patch['vert'] > 0][x]
             pts[edges, i] = patch[patch['vert'] < 0][x]
@@ -794,7 +795,7 @@ def _move_labels(subject: str, label: str, hemisphere: Sequence[Literal['lh', 'r
                            stderr=sp.PIPE)
         stdout, stderr = proc.communicate()
         if stderr not in ('', b''):
-            raise Exception("Error in freesurfer function call:\n{}".format(stderr))
+            raise Exception("Error in freesurfer function call:\n{}".format(stderr.decode()))
     print("Labels transferred")
 
 
@@ -821,7 +822,7 @@ def _parse_labels(label_files: Union[str, list[str]], cx_subject: str) -> tuple[
         label_files = [label_files]
     verts = []
     values = []
-    lh_surf, _ = database.db.get_surf(cx_subject, 'fiducial', 'left') # TODO: change to 'lh'
+    lh_surf, _ = database.db.get_surf(cx_subject, 'fiducial', 'lh')
     for fname in label_files:
         with open(fname) as fid:
             lines = fid.readlines()
@@ -930,9 +931,9 @@ def _check_datatype(data: npt.NDArray) -> np.dtype:
     """
     dtype = data.dtype
     if dtype == np.int64:
-        return np.int32
+        return np.dtype(np.int32)
     elif dtype == np.float64:
-        return np.float32
+        return np.dtype(np.float32)
     else:
         return dtype
 
@@ -1422,25 +1423,24 @@ class SpringLayout:
         if isinstance(pins, (list, set, np.ndarray)):
             pinmask[list(pins)] = True
         self.pins = pinmask
-        self.neighbors = [set() for _ in range(len(pts))]
+        neighbor_sets: list[set[int]] = [set() for _ in range(len(pts))]
 
         for i, j, k in polys:
-            self.neighbors[i].add(j)
-            self.neighbors[i].add(k)
-            self.neighbors[j].add(i)
-            self.neighbors[j].add(k)
-            self.neighbors[k].add(i)
-            self.neighbors[k].add(j)
+            neighbor_sets[i].add(j)
+            neighbor_sets[i].add(k)
+            neighbor_sets[j].add(i)
+            neighbor_sets[j].add(k)
+            neighbor_sets[k].add(i)
+            neighbor_sets[k].add(j)
 
         for _ in range(neighborhood):
-            _neighbors = copy.deepcopy(self.neighbors)
-            for v, neighbors in enumerate(self.neighbors):
+            _neighbors = copy.deepcopy(neighbor_sets)
+            for v, neighbors in enumerate(neighbor_sets):
                 for n in neighbors:
-                    _neighbors[v] |= self.neighbors[n]
-            self.neighbors = _neighbors
+                    _neighbors[v] |= neighbor_sets[n]
+            neighbor_sets = _neighbors
 
-        for i in range(len(self.neighbors)):
-            self.neighbors[i] = list(self.neighbors[i] - set([i]))
+        self.neighbors: list[list[int]] = [list(s - {i}) for i, s in enumerate(neighbor_sets)]
 
         if dpts is None:
             dpts = pts
@@ -1453,15 +1453,15 @@ class SpringLayout:
         self._move = np.zeros((len(pts), width, 3))
         #self._mean = np.zeros((len(pts), width))
         self._num = np.zeros((len(pts),))
-        self._dists = []
-        self._idx = []
+        dists: list[npt.NDArray[np.floating]] = []
+        idxs: list[npt.NDArray[np.floating]] = []
         for i, n in enumerate(self.neighbors):
             self._mask[i, :len(n)] = True
-            self._dists.append(np.sqrt(((dpts[n] - dpts[i])**2).sum(-1)))
-            self._idx.append(np.ones((len(n),))*i)
+            dists.append(np.sqrt(((dpts[n] - dpts[i])**2).sum(-1)))
+            idxs.append(np.ones((len(n),))*i)
             self._num[i] = len(n)
-        self._dists = np.hstack(self._dists)
-        self._idx = np.hstack(self._idx).astype(np.uint)
+        self._dists = np.hstack(dists)
+        self._idx = np.hstack(idxs).astype(np.uint)
         self._neigh = np.hstack(self.neighbors).astype(np.uint)
         self.figure = None
 
@@ -1874,4 +1874,4 @@ fs_aseg_dict = {'Unknown': 0,
 
 if __name__ == "__main__":
     import sys
-    show_surf(sys.argv[1], sys.argv[2], sys.argv[3])
+    show_surf(sys.argv[1], cast(Literal['lh', 'rh'], sys.argv[2]), sys.argv[3])
