@@ -43,8 +43,8 @@ try:
     def _lookup_cmap(name):
         return cm[name]
 except ImportError:
-    from matplotlib.cm import register_cmap
-    from matplotlib.cm import get_cmap as _lookup_cmap
+    from matplotlib.cm import register_cmap as register_cmap  # type: ignore[attr-defined,no-redef]
+    from matplotlib.cm import get_cmap as _lookup_cmap  # type: ignore[attr-defined,no-redef]
 
 P = ParamSpec('P')
 T = TypeVar('T')
@@ -58,7 +58,7 @@ class DocLoader(Generic[P, T]):
         return self._load()(*args, **kwargs)
 
     @overload
-    def __getattribute__(self, name: Literal['_load']) -> Callable[P, T]: ...
+    def __getattribute__(self, name: Literal['_load']) -> Callable[P, T]: ...  # type: ignore[misc]
 
     @overload
     def __getattribute__(self, name: str) -> Any: ...
@@ -410,6 +410,9 @@ def get_vox_dist(subject: str, xfmname: str, surface: str="fiducial", max_dist: 
 
     tree = cKDTree(fiducial)
     dist, argdist = tree.query(mm, distance_upper_bound=max_dist)
+    # mm is always an (n, 3) array of query points, so query() always
+    # returns arrays here, never the scalar-query overload.
+    assert isinstance(dist, np.ndarray) and isinstance(argdist, np.ndarray)
     dist.shape = (x, y, z)
     argdist.shape = (x, y, z)
     return dist.T, argdist.T
@@ -526,7 +529,7 @@ def add_roi(data, name="new_roi", open_inkscape=True, add_path=True,
 
 def _get_neighbors_dict(polys: npt.NDArray[np.integer]) -> dict[np.uint32, set[np.uint32]]:
     """Return a dictionary of {vertex : set(neighbor vertices)} for the given polys"""
-    neighbors_dict = {}
+    neighbors_dict: dict[np.uint32, set[np.uint32]] = {}
     for poly in polys:
         for i, j in ((0, 1), (1, 2), (2, 0)):
             neighbors_dict.setdefault(poly[i], set()).add(poly[j])
@@ -534,7 +537,7 @@ def _get_neighbors_dict(polys: npt.NDArray[np.integer]) -> dict[np.uint32, set[n
     return neighbors_dict
 
 
-def get_roi_verts(subject: str, roi: Optional[Union[str, list[str]]]=None, mask: bool=False, overlay_file: None=None) -> dict[str, npt.NDArray]:
+def get_roi_verts(subject: str, roi: Optional[Union[str, list[str]]]=None, mask: bool=False, overlay_file: Optional[str]=None) -> dict[str, npt.NDArray]:
     """Return vertices for the given ROIs, or all ROIs if none are given.
 
     Parameters
@@ -584,7 +587,7 @@ def get_roi_verts(subject: str, roi: Optional[Union[str, list[str]]]=None, mask:
         # surface that is, for every vertex in roi_idx we want to add the pts that are 
         # not in goodpts but that are in pts_full
         # to do that, we need to find the neighboring indices from polys_full
-        extra_idx = set()
+        extra_idx: set[np.uint32] = set()
         for idx in roi_idx:
             extra_idx.update(ii for ii in neighbors_dict[idx] if ii not in goodpts)
         if extra_idx:
@@ -744,9 +747,19 @@ def get_aseg_mask(subject, aseg_name, xfmname=None, order=1, threshold=None, **k
     return mask
 
 
+@overload
 def get_roi_masks(subject: str, xfmname: str, roi_list: Optional[list[str]]=None, gm_sampler: str='cortical', split_lr: bool=False,
                   allow_overlap: bool=False, fail_for_missing_rois: bool=True, exclude_empty_rois: bool=False,
-                  threshold: Optional[float]=None, return_dict: bool=True, overlay_file: Optional[str]=None) -> tuple[npt.NDArray[np.integer], dict[str, int]]:
+                  threshold: Optional[float]=None, return_dict: Literal[True]=True, overlay_file: Optional[str]=None) -> dict[str, npt.NDArray]: ...
+
+@overload
+def get_roi_masks(subject: str, xfmname: str, roi_list: Optional[list[str]]=None, gm_sampler: str='cortical', split_lr: bool=False,
+                  allow_overlap: bool=False, fail_for_missing_rois: bool=True, exclude_empty_rois: bool=False,
+                  threshold: Optional[float]=None, *, return_dict: Literal[False], overlay_file: Optional[str]=None) -> tuple[npt.NDArray[np.integer], dict[str, int]]: ...
+
+def get_roi_masks(subject: str, xfmname: str, roi_list: Optional[list[str]]=None, gm_sampler: str='cortical', split_lr: bool=False,
+                  allow_overlap: bool=False, fail_for_missing_rois: bool=True, exclude_empty_rois: bool=False,
+                  threshold: Optional[float]=None, return_dict: bool=True, overlay_file: Optional[str]=None) -> Union[dict[str, npt.NDArray], tuple[npt.NDArray[np.integer], dict[str, int]]]:
     """Return a dictionary of roi masks
 
     This function returns a single 3D array with a separate numerical index for each ROI,
@@ -1177,7 +1190,7 @@ def get_shared_voxels(subject: str, xfmname: str, *, hemi: Literal['lh', 'rh', '
         if merge:
             return np.vstack(out)
         else:
-            return tuple(out)
+            return out[0], out[1]
 
 
 def load_sparse_array(fname: str, varname: str):
