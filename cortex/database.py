@@ -756,9 +756,10 @@ class Database:
             self.auxfile.get_surf(subject, "fiducial")  # type: ignore[union-attr]
             #generate the hashed name of the filename and subject as the directory name
             import hashlib
-            # md5 needs bytes: passing the str filename raised an uncaught TypeError,
-            # so this path could never have completed.
-            filename = self.auxfile.h5.filename  # type: ignore[union-attr]
+            # _require_h5 raises IOError, which the handler below already covers.
+            # md5 needs bytes: passing the str filename raised an uncaught
+            # TypeError, so this path could never have completed.
+            filename = self.auxfile._require_h5().filename
             hashname = "pycx_%s"%hashlib.md5(filename.encode()).hexdigest()[-8:]
             cachedir = os.path.join(tempfile.gettempdir(), hashname, subject)
         except (AttributeError, IOError):
