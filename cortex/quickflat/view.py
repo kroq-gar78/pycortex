@@ -12,6 +12,7 @@ from matplotlib.typing import ColorType
 
 from .. import dataset, utils
 from . import composite
+from ..dataset._typing import is_colormapped
 from .utils import make_flatmap_image
 
 default_colorbar_locations = {
@@ -358,7 +359,7 @@ def make_svg(fname, braindata: dataset.Dataview, with_labels: bool=False, with_c
     mask_nans = np.isnan(arr[..., 3])
     arr[mask_nans, 3] = 0.
 
-    if hasattr(braindata, 'cmap'):
+    if is_colormapped(braindata):
         imsave(fp, arr, cmap=braindata.cmap, vmin=braindata.vmin, vmax=braindata.vmax)
     else:
         imsave(fp, arr)
