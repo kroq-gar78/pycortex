@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import tempfile
-from typing import Iterator, Optional, Union, overload, Literal
+from typing import Iterator, Literal, Optional, Union, overload
+
+import h5py
 import numpy as np
 import numpy.typing as npt
-import h5py
 
 from ..database import db
 from ..xfm import Transform
-
-from .braindata import _hdf_write
+from ._hdf import _hdf_write
+from .views import Dataview, Vertex, Volume, VolumeRGB, _from_hdf_data
 from .views import normalize as _vnorm
-from .views import Dataview, Vertex, Volume, _from_hdf_data
 
 class Dataset:
     """
@@ -31,6 +31,12 @@ class Dataset:
         self.views: dict[str, Dataview] = {}
 
         self.append(**kwargs)
+
+    def _require_h5(self) -> h5py.File:
+        """The backing file, or a clear error instead of a ``None`` subscript."""
+        if self.h5 is None:
+            raise IOError("This Dataset is not backed by a file")
+        return self.h5
 
     def append(self, **kwargs: Union[Dataview, dict, str, tuple, Dataset]) -> Dataset:
         """Add the views in `kwargs` into this dataset. Each keyword names
@@ -103,7 +109,7 @@ class Dataset:
         ds = cls()
         ds.h5 = h5py.File(filename, 'r')
 
-        db.auxfile = ds
+        db.auxfile = ds  # side channel: see Database.auxfile
 
         #detect stray datasets which were not written by pycortex
         for name, node in ds.h5.items():
@@ -190,8 +196,8 @@ class Dataset:
                         xfms.add((data.subject, data.xfmname))
                         #custom masks are already packaged by default
                         #only string masks need to be packed
-                        if isinstance(data._mask, str):
-                            masks.add((data.subject, data.xfmname, data._mask))
+                        if data.mask_name is not None:
+                            masks.add((data.subject, data.xfmname, data.mask_name))
 
             _pack_subjs(self.h5, subjs)
             _pack_xfms(self.h5, xfms)
@@ -257,7 +263,7 @@ class Dataset:
                 ppts, _     = self.get_surf(subject, 'pia', hemi)
                 return (wpts + ppts) / 2, polys
 
-            group = self.h5['subjects'][subject]['surfaces'][type][hemi]
+            group = self._require_h5()['subjects'][subject]['surfaces'][type][hemi]
             pts, polys = group['pts'][:].copy(), group['polys'][:].copy()
             if nudge:
                 if hemi == 'lh':
@@ -284,7 +290,7 @@ class Dataset:
             The requested transform.
         """
         try:
-            group: h5py.Group = self.h5['subjects'][subject]['transforms'][xfmname]
+            group: h5py.Group = self._require_h5()['subjects'][subject]['transforms'][xfmname]
             return Transform(group['xfm'][:], tuple(group['xfm'].attrs['shape']))
         except (KeyError, TypeError):
             raise IOError('Transform not found in package')
@@ -307,7 +313,7 @@ class Dataset:
             The requested mask array, as stored in the HDF5 file.
         """
         try:
-            group: h5py.Group = self.h5['subjects'][subject]['transforms'][xfmname]['masks']
+            group: h5py.Group = self._require_h5()['subjects'][subject]['transforms'][xfmname]['masks']
             return group[maskname]
         except (KeyError, TypeError):
             raise IOError('Mask not found in package')
@@ -331,7 +337,7 @@ class Dataset:
             the start.
         """
         try:
-            group: h5py.Group = self.h5['subjects'][subject]
+            group: h5py.Group = self._require_h5()['subjects'][subject]
             if type == "rois":
                 tf = tempfile.NamedTemporaryFile(delete = False)
                 tf.write(group['rois'][0])
@@ -361,9 +367,11 @@ def normalize(data: Dataview) -> Dataview: ...
 def normalize(data: Union[Dataset, dict, str]) -> Dataset: ...
 
 @overload
-def normalize(data: tuple) -> Union[Vertex, Volume]: ...
+def normalize(data: tuple) -> Union[Vertex, Volume, VolumeRGB]: ...
 
-def normalize(data: Union[DatasetLike, Dataview, tuple]) -> Union[Dataset, Dataview, Vertex, Volume]:
+def normalize(
+    data: Union[DatasetLike, Dataview, tuple],
+) -> Union[Dataset, Dataview, Vertex, Volume, VolumeRGB]:
     if isinstance(data, (Dataset, Dataview)):
         return data
     elif isinstance(data, dict):

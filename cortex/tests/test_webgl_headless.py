@@ -854,7 +854,9 @@ class TestAddData:
         other = cortex.Volume(np.random.randn(*volshape), subj, xfmname)
         # The subject only has to differ from the one the viewer was started
         # with; it never reaches the database because the check comes first.
-        other.subject = "not_a_loaded_subject"
+        # `subject` is read-only on a view, and building one for a missing
+        # subject would hit the database, so swap it in underneath.
+        other._subject = "not_a_loaded_subject"
         with pytest.raises(ValueError, match="not_a_loaded_subject"):
             handle.addData(third=other)
 
