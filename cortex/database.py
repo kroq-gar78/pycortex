@@ -568,6 +568,14 @@ class Database:
             xfmdict = json.load(f)
         return Transform(xfmdict[xfmtype], reference)
 
+    # `merge` and `nudge` are keyword-only in *every* signature, deliberately; see
+    # Dataset.get_surf, which mirrors this one. The `merge=True` overload has no
+    # choice -- it follows `hemisphere`, which has a default -- and leaving the
+    # others positional would make the calling convention depend on the argument
+    # value: `get_surf(s, t, 'both', True)` would run but match no overload, and a
+    # dynamic flag there would bind the wrong one. It also keeps `_memo` honest:
+    # that cache keys on `str((id(fn), args, kwargs))`, so the same call spelled
+    # positionally and by keyword lands in two different entries.
     @overload
     def get_surf(self, subject: str, type: str, hemisphere: Literal['both']='both', *, merge: Literal[True], nudge: bool=False) -> tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]:
         ...
@@ -580,7 +588,10 @@ class Database:
     def get_surf(self, subject: str, type: str, hemisphere: Literal['lh', 'rh'], *, merge: bool=False, nudge: bool=False) -> tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]:
         ...
 
-    # Fallthrough case for the recursive call
+    # Fallthrough for the recursive call and for callers whose `hemisphere` or
+    # `merge` is dynamic. `hemisphere` keeps its default so that a dynamic `merge`
+    # alone still matches: the three overloads above all pin `merge` to a literal.
+    # Being last, this only ever catches what they miss.
     @overload
     def get_surf(self, subject: str, type: str, hemisphere: Literal['lh', 'rh', 'both']="both", *, merge: bool=False, nudge: bool=False) -> Union[tuple[tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]]:
         ...
