@@ -205,6 +205,16 @@ class Dataset:
 
         self.h5.flush()
 
+    # `merge` and `nudge` are keyword-only in *every* signature, deliberately.
+    # The `merge=True` overload has no choice -- it follows `hemi`, which has a
+    # default, so it must be keyword-only to be expressible at all. Leaving the
+    # others positional would make the calling convention depend on the argument
+    # value: `get_surf(s, t, 'both', True)` would be legal at runtime but match no
+    # overload, so it would type-check as an error while working, and a caller
+    # writing `get_surf(s, t, 'both', flag)` for a dynamic `flag` would silently
+    # bind the wrong overload. One rule for all four removes that whole class of
+    # confusion, at the cost of rejecting positional booleans -- which nothing in
+    # the codebase or the docs passes, and which were unreadable anyway.
     @overload
     def get_surf(self, subject: str, type: str, hemi: Literal['both']='both', *, merge: Literal[False]=False, nudge: bool=False) -> tuple[tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]]: ...
 
@@ -214,8 +224,12 @@ class Dataset:
     @overload
     def get_surf(self, subject: str, type: str, hemi: Literal['lh', 'rh'], *, merge: bool=False, nudge: bool=False) -> tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]: ...
 
-    # Fallthrough case for callers (e.g. Database.get_surf's auxfile delegation) that pass
-    # a non-literal hemi/merge, which can't be matched to any of the overloads above.
+    # Fallback for callers whose `hemi` or `merge` is dynamic (e.g.
+    # Database.get_surf forwarding to an auxfile); the return type collapses to
+    # the union because neither branch can be selected statically. `hemi` keeps its
+    # default so that a dynamic `merge` alone still matches -- the three overloads
+    # above all pin `merge` to a literal, so without it `get_surf(s, t, merge=flag)`
+    # would resolve to nothing. Being last, this only ever catches what they miss.
     @overload
     def get_surf(self, subject: str, type: str, hemi: Literal['both', 'lh', 'rh']='both', *, merge: bool=False, nudge: bool=False) -> Union[tuple[tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]]: ...
 
