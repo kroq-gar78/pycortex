@@ -9,7 +9,8 @@ from matplotlib.figure import Figure
 from matplotlib.image import AxesImage
 
 from .. import dataset
-from ..dataset._typing import VolumetricRenderable, as_renderable
+from ..dataset._typing import as_renderable
+from ..dataset.views import VolumetricView
 from ..database import db
 from ..options import config
 from .utils import _get_height, _get_extents, _convert_svg_kwargs, _get_images, _parse_defaults
@@ -464,7 +465,7 @@ def add_custom(fig: Axes, dataview: dataset.Dataview, svgfile: str, layer: str, 
                     zorder=6)
     return img
 
-def add_connected_vertices(fig: Axes, dataview: VolumetricRenderable, exclude_border_width: Optional[int]=None,
+def add_connected_vertices(fig: Axes, dataview: VolumetricView, exclude_border_width: Optional[int]=None,
                            height: Optional[int]=None, extents: Optional[tuple[float, float, float, float]]=None, recache: bool=False,
                            color: tuple[float, float, float, float]=(1.0, 0.5, 0.1, 0.6), linewidth: float=0.75,
                            alpha: float=1.0, **kwargs) -> LineCollection:

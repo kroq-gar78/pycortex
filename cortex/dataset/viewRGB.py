@@ -34,8 +34,10 @@ from .views import (
     Dataview,
     DataviewJSON,
     ScalarView,
+    SurfaceView,
     Vertex,
     Volume,
+    VolumetricView,
     _blend_curvature,
 )
 
@@ -683,7 +685,7 @@ def _resolve_rgb_channels(
     return wrap(red), wrap(green), wrap(blue), alpha_out
 
 
-class VolumeRGB(DataviewRGB[Volume]):
+class VolumeRGB(DataviewRGB[Volume], VolumetricView):
     """
     Contains RGB (or RGBA) colors for each voxel in a volumetric dataset.
     Includes information about the subject and transform for the data.
@@ -796,7 +798,6 @@ class VolumeRGB(DataviewRGB[Volume]):
 
         if not red.xfmname == green.xfmname == blue.xfmname:
             raise ValueError("Cannot handle different transforms per volume")
-        self.xfmname = red.xfmname
 
         super().__init__(
             red,
@@ -808,6 +809,16 @@ class VolumeRGB(DataviewRGB[Volume]):
             state=state,
             priority=priority,
         )
+
+    @property
+    def xfmname(self) -> str:
+        """Transform name, shared by all three channels.
+
+        Derived rather than stored: the constructor already rejects channels with
+        differing transforms, so a copy would only be able to disagree. Mirrors
+        :attr:`Volume2D.xfmname`, which has always been a property.
+        """
+        return self.red.xfmname
 
     # ------------------------------------------------------------------
     # alpha, in volume space
@@ -881,7 +892,7 @@ class VolumeRGB(DataviewRGB[Volume]):
         return self._write_rgb_hdf(h5, name=name, xfmname=[self.xfmname])
 
 
-class VertexRGB(DataviewRGB[Vertex]):
+class VertexRGB(DataviewRGB[Vertex], SurfaceView):
     """
     Contains RGB (or RGBA) colors for each vertex in a surface dataset.
     Includes information about the subject.
