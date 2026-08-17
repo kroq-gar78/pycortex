@@ -5,7 +5,7 @@ from typing import Any, Mapping, Sequence, TypedDict, Union
 
 import cortex
 
-from ..dataset import Dataview
+from ..dataset import Dataview, VolumetricView
 
 file_pattern = "{base}_{view}_{surface}.png"
 
@@ -128,7 +128,9 @@ def save_3d_views(
 
         # Add interpolation and layers params only if we have a volume
         interpolation_params: ViewParams
-        if isinstance(volume, (cortex.Volume, cortex.Volume2D, cortex.VolumeRGB)):
+        # The row ABC, rather than enumerating the three volumetric classes:
+        # a view in a newly registered volumetric space is covered too.
+        if isinstance(volume, VolumetricView):
             interpolation_params = {
                 "surface.{subject}.sampler": interpolation,
                 "surface.{subject}.layers": layers,
