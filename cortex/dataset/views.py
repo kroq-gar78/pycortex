@@ -1048,26 +1048,11 @@ class Volume(ScalarView, VolumetricView):
 
     @classmethod
     def empty(cls, subject: str, xfmname: str, value: float = 0, **kwargs: Any) -> Self:
-        """
-        Create a constant-valued Volume for the given subject and xfmname.
-        Often useful for testing purposes.
+        """A Volume filled with ``value``, shaped by ``xfmname``'s reference volume.
 
-        Parameters
-        ----------
-        subject : str
-            Subject identifier. Must exist in the pycortex database.
-        xfmname : str
-            Transform name. Must exist in the pycortex database.
-        value : float, optional
-            Value that the Volume will be filled with.
-        **kwargs
-            Other keyword arguments are passed to the init function for this
-            class.
-
-        Returns
-        -------
-        Volume
-            A Volume whose data is constant, equal to value.
+        ``subject`` and ``xfmname`` must both exist in the pycortex database.
+        Other keyword arguments go to the constructor. Useful for tests, and as a
+        starting point for arithmetic -- ``Volume.empty(s, x) + 1``.
         """
         shape = VolumeSpace(subject, xfmname).template_shape
         return cls(cls._sample(shape, value), subject, xfmname, **kwargs)
@@ -1077,34 +1062,14 @@ class Volume(ScalarView, VolumetricView):
                random_type: Literal['low_frequency', 'uniform']='low_frequency',
                falloff_exponent: float=-1.25,
                **kwargs: Any) -> Self:
-        """
-        Create a random-valued Volume for the given subject and xfmname.
-        Random values are from gaussian distribution with mean 0, s.d. 1.
-        Often useful for testing purposes.
+        """A Volume of random noise, shaped by ``xfmname``'s reference volume.
 
-        Parameters
-        ----------
-        subject : str
-            Subject identifier. Must exist in the pycortex database.
-        xfmname : str
-            Transform name. Must exist in the pycortex database.
-        random_type : str, optional
-            type of random data to use. Default: low_frequency. One of
-            ('low_frequency', 'uniform')
-            'low_frequency' yields blobby, brain-like data
-            'uniform' yields uniform random noise.
-        falloff_exponent : float, optional
-            Only used when random_type is 'low_frequency'. Factor by which
-            Fourier power falls off. Higher magnitude emphasizes low
-            frequencies more strongly.
-        **kwargs
-            Other keyword arguments are passed to the init function for this
-            class.
-
-        Returns
-        -------
-        Volume
-            A Volume whose data is random.
+        ``random_type='low_frequency'``, the default, gives blobby, brain-like data:
+        gaussian noise whose Fourier power falls off as ``|f| ** falloff_exponent``,
+        so a larger magnitude emphasizes low frequencies more strongly, normalized
+        to mean 0, s.d. 1. ``'uniform'`` gives plain standard normal noise.
+        ``subject`` and ``xfmname`` must both exist in the pycortex database; other
+        keyword arguments go to the constructor.
         """
         shape = VolumeSpace(subject, xfmname).template_shape
         if random_type == 'uniform':
@@ -1384,24 +1349,11 @@ class Vertex(ScalarView, SurfaceView):
 
     @classmethod
     def empty(cls, subject: str, value: float = 0, **kwargs: Any) -> Self:
-        """
-        Create a constant-valued Vertex for the given subject.
-        Often useful for testing purposes.
+        """A Vertex filled with ``value``, one entry per vertex of both hemispheres.
 
-        Parameters
-        ----------
-        subject : str
-            Subject identifier. Must exist in the pycortex database.
-        value : float, optional
-            Value that the Vertex will be filled with.
-        **kwargs
-            Other keyword arguments are passed to the init function for this
-            class.
-
-        Returns
-        -------
-        Vertex
-            A Vertex whose data is constant, equal to value.
+        ``subject`` must exist in the pycortex database. Other keyword arguments
+        go to the constructor. Useful for tests, and as a starting point for
+        arithmetic -- ``Vertex.empty(s) + 1``.
         """
         shape = SurfaceSpace(subject).template_shape
         return cls(cls._sample(shape, value), subject, **kwargs)
@@ -1410,32 +1362,14 @@ class Vertex(ScalarView, SurfaceView):
     def random(cls, subject: str, random_type: Literal['low_frequency', 'uniform']='low_frequency',
                smooth_factor: float=40,
                **kwargs: Any) -> Self:
-        """
-        Create a random-valued Vertex for the given subject.
-        Random values are from gaussian distribution with mean 0, s.d. 1.
-        Often useful for testing purposes.
+        """A Vertex of random noise, one entry per vertex of both hemispheres.
 
-        Parameters
-        ----------
-        subject : str
-            Subject identifier. Must exist in the pycortex database.
-        random_type : str, optional
-            type of random data to use. Default: low_frequency. One of
-            ('low_frequency', 'uniform')
-            'low_frequency' yields blobby, brain-like data
-            'uniform' yields uniform random noise.
-        smooth_factor : float, optional
-            Only used when random_type is 'low_frequency'. Amount of
-            smoothing to apply to the underlying random data; larger values
-            smooth more. Passed as `factor` to `polyutils.Surface.smooth`.
-        **kwargs
-            Other keyword arguments are passed to the init function for this
-            class.
-
-        Returns
-        -------
-        Vertex
-            A Vertex with random data.
+        ``random_type='low_frequency'``, the default, gives blobby, brain-like data:
+        gaussian noise smoothed over each hemisphere's fiducial surface, then
+        normalized to mean 0, s.d. 1. ``smooth_factor`` is passed as ``factor`` to
+        ``polyutils.Surface.smooth``; larger values smooth more. ``'uniform'`` gives
+        plain standard normal noise. ``subject`` must exist in the pycortex
+        database; other keyword arguments go to the constructor.
         """
         if random_type == 'uniform':
             rand_data = cls._sample(SurfaceSpace(subject).template_shape, None)
