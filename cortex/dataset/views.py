@@ -637,6 +637,18 @@ class ScalarView(Packable):
     def __hash__(self) -> int:
         return hash(_hash(self.data))
 
+    @staticmethod
+    def _sample(shape: tuple[int, ...], value: Optional[float]) -> npt.NDArray:
+        """A fresh array of ``shape``: constant ``value``, or standard normal.
+
+        The body shared by ``empty`` and ``random`` in every space. ``np.ones() *
+        value`` rather than ``np.full``, which would give an integer array for the
+        default ``value=0``.
+        """
+        if value is None:
+            return np.random.randn(*shape)
+        return np.ones(shape) * value
+
     def uniques(self, collapse: bool = False) -> Iterator["Packable"]:
         """Yield the underlying view(s) this view is built from.
 
@@ -1057,9 +1069,8 @@ class Volume(ScalarView, VolumetricView):
         Volume
             A Volume whose data is constant, equal to value.
         """
-        xfm = db.get_xfm(subject, xfmname)
-        shape = xfm.shape
-        return cls(np.ones(shape) * value, subject, xfmname, **kwargs)
+        shape = VolumeSpace(subject, xfmname).template_shape
+        return cls(cls._sample(shape, value), subject, xfmname, **kwargs)
 
     @classmethod
     def random(cls, subject: str, xfmname: str,
@@ -1095,10 +1106,9 @@ class Volume(ScalarView, VolumetricView):
         Volume
             A Volume whose data is random.
         """
-        xfm = db.get_xfm(subject, xfmname)
-        shape = xfm.shape
+        shape = VolumeSpace(subject, xfmname).template_shape
         if random_type == 'uniform':
-            rdata = np.random.randn(*shape)
+            rdata = cls._sample(shape, None)
         elif random_type == 'low_frequency':
             rdata = _low_freq_noise(shape, falloff_exponent=falloff_exponent)
         else:
@@ -1393,8 +1403,8 @@ class Vertex(ScalarView, SurfaceView):
         Vertex
             A Vertex whose data is constant, equal to value.
         """
-        nverts = cls._count_verts(subject)
-        return cls(np.ones((nverts,)) * value, subject, **kwargs)
+        shape = SurfaceSpace(subject).template_shape
+        return cls(cls._sample(shape, value), subject, **kwargs)
 
     @classmethod
     def random(cls, subject: str, random_type: Literal['low_frequency', 'uniform']='low_frequency',
@@ -1428,7 +1438,7 @@ class Vertex(ScalarView, SurfaceView):
             A Vertex with random data.
         """
         if random_type == 'uniform':
-            rand_data = np.random.randn(cls._count_verts(subject))
+            rand_data = cls._sample(SurfaceSpace(subject).template_shape, None)
         elif random_type == 'low_frequency':
             (lpts, lpolys), (rpts, rpolys) = db.get_surf(subject, 'fiducial')
             ldata = polyutils.Surface(lpts, lpolys).smooth(np.random.randn(len(lpts)), factor=smooth_factor)
@@ -1439,10 +1449,6 @@ class Vertex(ScalarView, SurfaceView):
             raise ValueError("random_type must be one of ('low_frequency', 'uniform')")
 
         return cls(rand_data, subject, **kwargs)
-
-    @staticmethod
-    def _count_verts(subject: str) -> int:
-        return SurfaceSpace(subject).nverts
 
     def __getitem__(self, idx: Any) -> Self:
         """Get the Vertex for the given time index. Only works for movie (2D)
@@ -1710,7 +1716,7 @@ from .view2D import Dataview2D, Vertex2D, Volume2D  # noqa: E402
 
 
 # Make low frequency 3d data
-def _low_freq_noise(size: Union[int, tuple[int, int, int]],
+def _low_freq_noise(size: Union[int, tuple[int, ...]],
                      falloff_exponent: float=-1.25) -> npt.NDArray[np.float64]:
     """Make low-frequency noise
 
