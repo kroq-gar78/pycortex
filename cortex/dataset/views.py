@@ -805,6 +805,14 @@ class ScalarView(Packable):
     # serialization
     # ------------------------------------------------------------------
     def to_json(self, simple: bool = False) -> DataviewJSON:
+        """One implementation for every space; the space supplies its own keys.
+
+        ``Volume`` and ``Vertex`` used to override this to bolt on ``shape`` and
+        ``split``/``frames`` respectively, which is the same question -- how does
+        the browser unpack this array -- answered per space. It is now
+        :meth:`BrainSpace.describe_layout`, so a new space contributes its keys
+        without touching this method.
+        """
         sdict = super().to_json(simple=simple)
         if simple:
             sdict.update(
@@ -815,6 +823,7 @@ class ScalarView(Packable):
                     max=float(np.nan_to_num(self.data).max()),
                 )
             )
+            sdict.update(self.space.describe_layout(self.data))
             return sdict
 
         sdict.update(
@@ -832,6 +841,8 @@ class ScalarView(Packable):
                 ],
             )
         )
+        sdict.update(DataviewJSON(data=[self.name]))
+        sdict.update(self.space.to_json())
         return sdict
 
     def _write_cmap_slots(self, view: h5py.Dataset) -> None:
@@ -1108,20 +1119,6 @@ class Volume(ScalarView, VolumetricView):
         maskstr = maskstr[0].upper() + maskstr[1:]
         return "<%s data for (%s, %s)>" % (maskstr, self.subject, self.xfmname)
 
-    # ------------------------------------------------------------------
-    # serialization
-    # ------------------------------------------------------------------
-    def to_json(self, simple: bool = False) -> DataviewJSON:
-        if simple:
-            sdict = super().to_json(simple=simple)
-            sdict["shape"] = self.shape
-            return sdict
-
-        sdict = DataviewJSON(data=[self.name])
-        sdict.update(self.space.to_json())
-        sdict.update(super().to_json())
-        return sdict
-
     @property
     def raw(self) -> VolumeRGB:
         """Colormap this Volume's data into an RGBA VolumeRGB.
@@ -1242,16 +1239,12 @@ class Vertex(ScalarView, SurfaceView):
     @property
     def left(self) -> npt.NDArray:
         """Data for only the left hemisphere vertices."""
-        if self.movie:
-            return self.data[:, : self.llen]
-        return self.data[: self.llen]
+        return self.space.split_hemispheres(self.data)[0]
 
     @property
     def right(self) -> npt.NDArray:
         """Data for only the right hemisphere vertices."""
-        if self.movie:
-            return self.data[:, self.llen :]
-        return self.data[self.llen :]
+        return self.space.split_hemispheres(self.data)[1]
 
     def volume(
         self, xfmname: str, projection: str = "nearest", **kwargs: Any
@@ -1396,36 +1389,6 @@ class Vertex(ScalarView, SurfaceView):
     def __repr__(self) -> str:
         maskstr = "movie " if self.movie else ""
         return "<Vertex %sdata for %s>" % (maskstr, self.subject)
-
-    # ------------------------------------------------------------------
-    # serialization
-    # ------------------------------------------------------------------
-    def to_json(self, simple: bool = False) -> DataviewJSON:
-        """Serialize this vertex data to a JSON-compatible dict, for the
-        webgl viewer / HDF5 export.
-
-        Parameters
-        ----------
-        simple : bool, optional
-            If True, return an abbreviated summary (hemisphere split point
-            and frame count) rather than the full webgl payload. Default
-            False.
-
-        Returns
-        -------
-        dict
-            Serialized data.
-        """
-        if simple:
-            sdict = DataviewJSON(
-                split=self.llen, frames=self.vertices.shape[0]
-            )
-            sdict.update(super().to_json(simple=simple))
-            return sdict
-
-        sdict = DataviewJSON(data=[self.name])
-        sdict.update(super().to_json())
-        return sdict
 
     @property
     def raw(self) -> VertexRGB:
