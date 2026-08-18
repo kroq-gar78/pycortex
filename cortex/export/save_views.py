@@ -128,7 +128,7 @@ def save_3d_views(
 
         # Add interpolation and layers params only if we have a volume
         interpolation_params: ViewParams
-        # The row ABC, rather than enumerating the three volumetric classes:
+        # The spatial ABC, rather than enumerating the three volumetric classes:
         # a view in a newly registered volumetric space is covered too.
         if isinstance(volume, VolumetricView):
             interpolation_params = {
