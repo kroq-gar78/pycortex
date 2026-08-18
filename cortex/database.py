@@ -313,14 +313,12 @@ class Database:
 
         if not os.path.exists(anatfile) or recache:
             if type == 'raw':
-                # cortex.anat has no `raw` generator: the raw anatomical is the
-                # subject's primary scan, provided directly, never derived from
-                # something else. getattr(anat, 'raw') below would otherwise fail
-                # with an unhelpful AttributeError.
                 raise IOError(
-                    "No raw anatomical found for subject '%s'; it must be added "
-                    "directly to the filestore, it cannot be generated."%subject)
-            print("Generating %s anatomical..."%type)
+                    f"No raw anatomical found for subject '{subject}'; unlike "
+                    "brainmask/whitematter/voxelize, it isn't derived from anything "
+                    "else, so it must be added directly to the filestore instead of "
+                    "(re)generated.")
+            print(f"Generating {type} anatomical...")
             from . import anat
             getattr(anat, type)(anatfile, subject, **kwargs)
 
@@ -575,20 +573,20 @@ class Database:
         ...
 
     @overload
-    def get_surf(self, subject: str, type: str, hemisphere: Literal['both']='both', merge: Literal[False]=False, nudge: bool=False) -> tuple[tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]]:
+    def get_surf(self, subject: str, type: str, hemisphere: Literal['both']='both', *, merge: Literal[False]=False, nudge: bool=False) -> tuple[tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]]:
         ...
 
     @overload
-    def get_surf(self, subject: str, type: str, hemisphere: Literal['lh', 'rh'], merge: bool=False, nudge: bool=False) -> tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]:
+    def get_surf(self, subject: str, type: str, hemisphere: Literal['lh', 'rh'], *, merge: bool=False, nudge: bool=False) -> tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]:
         ...
 
     # Fallthrough case for the recursive call
     @overload
-    def get_surf(self, subject: str, type: str, hemisphere: Literal['lh', 'rh', 'both']="both", merge: bool=False, nudge: bool=False) -> Union[tuple[tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]]:
+    def get_surf(self, subject: str, type: str, hemisphere: Literal['lh', 'rh', 'both']="both", *, merge: bool=False, nudge: bool=False) -> Union[tuple[tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]]:
         ...
 
     @_memo
-    def get_surf(self, subject: str, type: str, hemisphere: Literal['lh', 'rh', 'both']="both", merge: bool=False, nudge: bool=False) -> Union[tuple[tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]]:
+    def get_surf(self, subject: str, type: str, hemisphere: Literal['lh', 'rh', 'both']="both", *, merge: bool=False, nudge: bool=False) -> Union[tuple[tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]], tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]]:
         '''Return the surface pair for the given subject, surface type, and hemisphere.
 
         Parameters
