@@ -10,7 +10,8 @@ from .database import db
 from .xfm import Transform
 
 DType = TypeVar('DType', bound=np.generic)
-# TODO: MaskedArray typing might require newer numpy versions. If so, drop the generic typing.
+# Generic np.ma.MaskedArray[...] subscripting requires numpy>=1.22 (evaluated eagerly
+# here, since this file has no `from __future__ import annotations`) — see requirements.txt.
 def unmask(mask: np.ndarray[tuple[int, int, int], np.dtype[np.bool_]], data: npt.NDArray[DType]) -> Union[np.ma.MaskedArray[tuple[int, ...], np.dtype[DType]], npt.NDArray[DType], npt.NDArray[np.uint8]]:
     """unmask(mask, data)
 

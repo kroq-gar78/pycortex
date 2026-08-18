@@ -1,6 +1,6 @@
 setuptools
 future
-numpy>=1.13.0
+numpy>=1.22.0
 scipy
 tornado>=4.3
 shapely

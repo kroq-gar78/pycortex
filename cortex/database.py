@@ -312,7 +312,14 @@ class Database:
         anatfile = anatform.format(type=type, opts=opts, ext="nii.gz")
 
         if not os.path.exists(anatfile) or recache:
-            # TODO: does `raw` enter this block?
+            if type == 'raw':
+                # cortex.anat has no `raw` generator: the raw anatomical is the
+                # subject's primary scan, provided directly, never derived from
+                # something else. getattr(anat, 'raw') below would otherwise fail
+                # with an unhelpful AttributeError.
+                raise IOError(
+                    "No raw anatomical found for subject '%s'; it must be added "
+                    "directly to the filestore, it cannot be generated."%subject)
             print("Generating %s anatomical..."%type)
             from . import anat
             getattr(anat, type)(anatfile, subject, **kwargs)
@@ -563,7 +570,6 @@ class Database:
             xfmdict = json.load(f)
         return Transform(xfmdict[xfmtype], reference)
 
-    # TODO: forcing '*' WILL cause issues. Look for all instances of merge=True !
     @overload
     def get_surf(self, subject: str, type: str, hemisphere: Literal['both']='both', *, merge: Literal[True], nudge: bool=False) -> tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]:
         ...
