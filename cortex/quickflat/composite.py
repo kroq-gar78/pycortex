@@ -9,7 +9,7 @@ from matplotlib.figure import Figure
 from matplotlib.image import AxesImage
 
 from .. import dataset
-from ..dataset._typing import HasSubject, as_renderable
+from ..dataset.views import HasSubject, as_renderable
 from ..dataset.views import VolumetricView
 from ..database import db
 from ..options import config

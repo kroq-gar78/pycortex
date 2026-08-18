@@ -484,7 +484,6 @@ def test_volume_random(random_type):
     [
         "cortex.dataset._hdf",
         "cortex.dataset._space",
-        "cortex.dataset._typing",
         "cortex.dataset.braindata",
         "cortex.dataset.dataset",
         "cortex.dataset.view2D",
@@ -677,7 +676,7 @@ def test_as_renderable_rejects_a_view_with_neither_interface():
     Unlike an enumeration of known classes it accepts a view in *any* space, so
     long as it exposes the interface.
     """
-    from cortex.dataset._typing import as_renderable
+    from cortex.dataset.views import as_renderable
 
     vol = cortex.Volume(np.ones(volshape), subj, xfmname)
     assert as_renderable(vol) is vol
@@ -710,7 +709,7 @@ def test_as_renderable_accepts_a_third_party_view_that_inherits_a_row():
     inherits whichever row describes how its data is sampled -- no registry entry
     and no union to edit.
     """
-    from cortex.dataset._typing import as_renderable
+    from cortex.dataset.views import as_renderable
     from cortex.dataset.views import SurfaceView
 
     class ThirdPartyView(SurfaceView):
@@ -747,7 +746,7 @@ def test_as_renderable_rejects_a_lookalike_that_merely_has_the_attributes():
     A Protocol's isinstance tests only for the *presence* of the member names, so
     this class would satisfy one. A nominal base class rejects it.
     """
-    from cortex.dataset._typing import as_renderable
+    from cortex.dataset.views import as_renderable
     from cortex.dataset.views import SurfaceView, VolumetricView
 
     class Lookalike(dataset.Dataview):
@@ -816,7 +815,7 @@ def test_static_only_protocols_refuse_isinstance():
     """
     from typing import Any
 
-    from cortex.dataset._typing import HasSubject
+    from cortex.dataset.views import HasSubject
 
     vol = cortex.Volume(np.ones(volshape), subj, xfmname)
     # The guard has two halves. Statically, mypy rejects `isinstance(vol,
@@ -830,7 +829,7 @@ def test_static_only_protocols_refuse_isinstance():
 
 def test_static_only_protocols_are_still_satisfied_structurally():
     """They are real contracts, just checked statically. Verify the shape holds."""
-    from cortex.dataset._typing import HasSubject
+    from cortex.dataset.views import HasSubject
 
     vol = cortex.Volume(np.ones(volshape), subj, xfmname)
     # what HasSubject promises, on every view kind
@@ -875,10 +874,7 @@ def test_protocol_implementations_are_declared_not_merely_structural():
     # interchangeably, so a duplicate declaration is invisible to mypy and to the
     # assertion above -- `cortex.dataset.HasSubject` was once a second class that
     # no view actually inherited. Only object identity catches that.
-    import cortex.dataset._typing as _typing
-
     assert cortex.dataset.HasSubject is HasSubject
-    assert _typing.HasSubject is HasSubject
 
     # blend_curvature is defined once, on the row, not per concrete class
     assert "blend_curvature" in SurfaceView.__dict__
@@ -920,7 +916,7 @@ def test_a_third_row_needs_no_change_to_the_renderer():
     import inspect
 
     from cortex.dataset._space import BrainSpace
-    from cortex.dataset._typing import as_renderable
+    from cortex.dataset.views import as_renderable
     from cortex.dataset.views import RenderableView, SurfaceView, VolumetricView
     from cortex.quickflat import utils as qutils
 
