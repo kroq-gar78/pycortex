@@ -24,6 +24,7 @@ from tornado import web
 from .. import dataset, options, utils, volume
 from ..database import db
 from . import serve
+from ..dataset.views import _dumps
 from .data import Package
 from .FallbackLoader import FallbackLoader
 
@@ -326,7 +327,7 @@ def make_static(
             my_viewopts[sec] = dict(options.config.items(sec))
 
     html = tpl.generate(
-        data=json.dumps(metadata),
+        data=_dumps(metadata),
         colormaps=colormaps,
         default_cmap="RdBu_r",
         python_interface=False,
@@ -600,7 +601,7 @@ def show(
     class MixerHandler(web.RequestHandler):
         def get(self):
             self.set_header("Content-Type", "text/html")
-            generated = html.generate(data=json.dumps(metadata),
+            generated = html.generate(data=_dumps(metadata),
                                       colormaps=colormaps,
                                       default_cmap="RdBu_r",
                                       python_interface=True,
