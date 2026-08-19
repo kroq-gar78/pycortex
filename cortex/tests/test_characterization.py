@@ -76,49 +76,30 @@ COLORMAPPED = sorted(k for k, v in GRID.items() if v[2] in ("scalar", "2d"))
 
 
 # Five defects this file found on its first run, before anything was refactored.
-# They are recorded as *strict* xfails rather than fixed here or asserted as
-# correct: strict means the suite fails if one starts passing, so a step of the
-# refactor that repairs one has to say so by removing the mark. That is the point
-# of writing the net first -- these are what "behaviour-preserving" would
-# otherwise have quietly preserved.
+# All five are now **fixed**, by the restructure rather than by being patched, and
+# the marks that recorded them are gone -- which is what a strict xfail is for: it
+# fails when the defect stops reproducing, so the fix cannot pass unnoticed. Kept
+# here as a record of what each one was and what fixed it:
 #
-#: `Vertex2D` cannot be reloaded at all. Slot 7 of the view record is null for a
-#: surface view, so `xfmname` arrives as None rather than a per-channel list and
-#: `Dataview.from_hdf` indexes it unconditionally. `Dataset.from_file` swallows
-#: per-view exceptions, so the view is silently *dropped* rather than raising.
-VERTEX2D_RELOAD_DROPS = pytest.mark.xfail(
-    strict=True, reason="Vertex2D is silently dropped on reload (slot 7 is null)"
-)
-#: `Volume2D` has no `.volume`, though `Vertex2D` has `.vertices`. The accessor is
-#: defined per class rather than per column, and this one was missed.
-VOLUME2D_HAS_NO_VOLUME = pytest.mark.xfail(
-    strict=True, reason="Volume2D has no .volume, unlike Vertex2D.vertices"
-)
-#: A surface RGB *movie* is unconstructible: `_default_alpha` sizes itself from
-#: `vertices.shape[1]`, the vertex count alone, which has no frame axis.
-VERTEXRGB_MOVIE_UNCONSTRUCTIBLE = pytest.mark.xfail(
-    strict=True, reason="VertexRGB movies raise in _default_alpha"
-)
-#: An RGB view built without an explicit alpha reloads **fully transparent**. The
-#: synthesized all-ones alpha *is* written as a fourth data node, and its bounds are
-#: then percentiles of a constant array -- vmin == vmax == 1 -- so normalizing it
-#: divides by zero, giving nan and a uint8 0. Fresh views are unaffected, because
-#: there `_alpha is None` and the synthesized channel is given vmin=0, vmax=1.
-#: The values render invisibly rather than wrongly, which is how this survived.
-RGB_DEFAULT_ALPHA_RELOADS_TRANSPARENT = pytest.mark.xfail(
-    strict=True, reason="a default-alpha RGB view reloads fully transparent"
-)
-#: `description` comes back from HDF as `bytes`, for every one of the six.
-#: `from_hdf` reads slot 1 straight out of the h5py vlen-str dataset and hands it
-#: to the constructor without decoding.
-DESCRIPTION_RELOADS_AS_BYTES = pytest.mark.xfail(
-    strict=True, reason="description reloads as bytes, not str"
-)
-
-
-def _grid(**marks):
-    """``ALL``, with an xfail mark attached to the named cases."""
-    return [pytest.param(n, marks=marks[n]) if n in marks else n for n in ALL]
+# - `Vertex2D` could not be reloaded at all. Slot 7 is null for a surface view, so
+#   `xfmname` arrived as None rather than a per-channel list and `from_hdf` indexed
+#   it unconditionally; `Dataset.from_file` swallows per-view exceptions, so the
+#   view was silently *dropped*. Fixed by `space.view_xfmname`, which is None for a
+#   space with no transform, and by `_from_hdf_view` no longer assuming a list.
+# - An RGB view built without an explicit alpha reloaded **fully transparent**. The
+#   synthesized all-ones alpha was written as a fourth data node, because `uniques`
+#   and `_write_hdf` tested the `alpha` *property*, which builds one on demand and
+#   is therefore never None. Reloaded, its bounds were percentiles of a constant
+#   array -- vmin == vmax == 1 -- so normalizing divided by zero. Fixed by testing
+#   `_alpha`, the stored field.
+# - `VertexRGB` movies were unconstructible: the default alpha was sized from the
+#   sampled array's vertex count alone, which carries no frame axis. Fixed by
+#   sizing from the channel's stored array, which has the frame axis exactly when
+#   the channels do.
+# - `Volume2D` had no `.volume`, though `Vertex2D` had `.vertices`. Fixed by
+#   `Dataview2D.dense`, one accessor on the column that both now forward to.
+# - `description` reloaded as `bytes` for all six. Fixed by decoding slot 1 in
+#   `from_hdf`.
 
 
 @pytest.fixture
@@ -157,7 +138,7 @@ def test_a_colormapped_view_has_a_colormap_and_bounds(name):
 # ----------------------------------------------------------------------
 # the sampled array
 # ----------------------------------------------------------------------
-@pytest.mark.parametrize("name", _grid(Volume2D=VOLUME2D_HAS_NO_VOLUME))
+@pytest.mark.parametrize("name", ALL)
 def test_the_sampled_array_has_a_leading_frame_axis(name):
     factory, volumetric, layout = GRID[name]
     view = factory()
@@ -229,15 +210,7 @@ def test_uniques_collapses_to_content_addressed_names(name):
 # ----------------------------------------------------------------------
 # HDF round trip
 # ----------------------------------------------------------------------
-@pytest.mark.parametrize(
-    "name",
-    _grid(
-        Vertex2D=VERTEX2D_RELOAD_DROPS,
-        Volume2D=VOLUME2D_HAS_NO_VOLUME,
-        VolumeRGB=RGB_DEFAULT_ALPHA_RELOADS_TRANSPARENT,
-        VertexRGB=RGB_DEFAULT_ALPHA_RELOADS_TRANSPARENT,
-    ),
-)
+@pytest.mark.parametrize("name", ALL)
 def test_the_view_survives_an_hdf_round_trip(name, hdf_path):
     factory, volumetric, layout = GRID[name]
     view = factory()
@@ -247,6 +220,7 @@ def test_the_view_survives_an_hdf_round_trip(name, hdf_path):
 
     assert type(reloaded) is type(view)
     assert reloaded.subject == view.subject
+    assert reloaded.description == view.description
     if volumetric:
         assert reloaded.xfmname == view.xfmname
     if layout != "rgb":
@@ -260,7 +234,7 @@ def test_the_view_survives_an_hdf_round_trip(name, hdf_path):
     assert np.allclose(np.nan_to_num(before), np.nan_to_num(after))
 
 
-@pytest.mark.parametrize("name", _grid(**{n: DESCRIPTION_RELOADS_AS_BYTES for n in ALL}))
+@pytest.mark.parametrize("name", ALL)
 def test_the_description_survives_an_hdf_round_trip(name, hdf_path):
     """Separate from the round trip above so one defect does not mask the rest."""
     view = GRID[name][0]()
@@ -270,14 +244,7 @@ def test_the_description_survives_an_hdf_round_trip(name, hdf_path):
     assert reloaded.description == view.description
 
 
-@pytest.mark.parametrize(
-    "name",
-    _grid(
-        Vertex2D=VERTEX2D_RELOAD_DROPS,
-        Volume2D=VOLUME2D_HAS_NO_VOLUME,
-        VertexRGB=VERTEXRGB_MOVIE_UNCONSTRUCTIBLE,
-    ),
-)
+@pytest.mark.parametrize("name", ALL)
 def test_a_movie_survives_an_hdf_round_trip(name, hdf_path):
     _, volumetric, layout = GRID[name]
     frames = 3

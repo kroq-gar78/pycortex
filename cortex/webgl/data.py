@@ -10,13 +10,10 @@ dict(
 
 import os
 import json
-from io import BytesIO
 import numpy as np
-import numpy.typing as npt
 
 from .. import dataset
-from .. import volume
-from typing import Optional, TypedDict, Union
+from typing import Any, Optional, TypedDict
 
 class PackageMetadata(TypedDict):
     views: list[dataset.DataviewJSON]
@@ -33,55 +30,31 @@ class Package(object):
         self.subjects: set[str] = set()
 
         self.brains: dict[str, dataset.DataviewJSON] = dict()
-        self.images: dict[str, list[bytes]] = dict()
+        # Two-phase, which is why this is not `list[bytes]`: the mosaicked-texture
+        # encoding finishes as PNG bytes here, but the per-vertex one leaves an
+        # array in place and only `reorder` turns it into `.npy` bytes, since it
+        # cannot serialise before the CTM's vertex order is known.
+        self.images: dict[str, list[Any]] = dict()
+        # Kept so `reorder` asks the same encoding that produced the frames what
+        # to do with them, rather than re-deriving it from the view's class.
+        self._payloads: dict[str, Any] = dict()
         for brain in self.uniques:
             name = brain.name
             self.subjects.add(brain.subject)
             self.brains[name] = brain.to_json(simple=True)
-            if isinstance(brain, (dataset.Vertex, dataset.VertexRGB)):
-                encdata = brain.vertices
-            else:
-                encdata = brain.volume
-            if isinstance(brain, (dataset.VolumeRGB, dataset.VertexRGB)):
-                encdata = encdata.astype(np.uint8)
-                # The WebGL fragment shader (shaderlib.js) composites with a
-                # premultiplied-alpha "over" formula
-                # (gl_FragColor = vColor + (1-α)·bg). We only need to pre-
-                # multiply on the Python side for VertexRGB, where the bytes
-                # are uploaded as raw vertex attributes and Three.js does NOT
-                # premultiply (see dataset.js VertexData path). VolumeRGB ships
-                # through the PNG texture path (dataset.js:335-338, raw=true),
-                # where Three.js sets `tex.premultiplyAlpha = true` and the
-                # WebGL UNPACK_PREMULTIPLY_ALPHA_WEBGL hook premultiplies the
-                # texture once on upload -- premultiplying here would double-
-                # attenuate it. The .vertices/.volume properties stay
-                # non-premultiplied so the matplotlib (quickshow) path keeps
-                # using matplotlib's straight-alpha imshow compositor.
-                if isinstance(brain, dataset.VertexRGB):
-                    # Note: encdata is already a fresh uint8 copy from the
-                    # .astype(np.uint8) call above, so we can write into it
-                    # in place. The assignment to a uint8 slice handles the
-                    # float→uint8 cast for us.
-                    a = encdata[..., 3:4].astype(np.float32) / 255.0
-                    encdata[..., :3] = np.round(
-                        encdata[..., :3].astype(np.float32) * a
-                    )
-                self.brains[name]["raw"] = True
-            else:
-                encdata = encdata.astype(np.float32)
-                self.brains[name]["raw"] = False
-
-            # VertexData requires reordering, only save normalized version for now
-            if isinstance(brain, (dataset.Vertex, dataset.VertexRGB)):
-                # TODO: how does this work? check if tests run this part
-                self.images[name] = [encdata]
-            else:
-                # TODO: make temporary typing work
-                self.images[name] = [volume.mosaic(vol, show=False) for vol in encdata]
-                if len(set([shape for m, shape in self.images[name]])) != 1:
-                    raise ValueError("Internal error in mosaic")
-                self.brains[name]["mosaic"] = self.images[name][0][1]
-                self.images[name] = [_pack_png(m) for m, shape in self.images[name]]
+            # Two questions, both answered by the view rather than by its class:
+            # `dense` is the array to ship, and `space.pack_for_webgl` is how it
+            # reaches the browser. This module used to answer the second itself,
+            # in three `isinstance(brain, (Vertex, VertexRGB))` forks -- the
+            # premultiplied-alpha asymmetry, the packing, and the vertex
+            # reordering -- so one fact was restated once per consequence, and a
+            # space this module had not heard of took whichever `else` came first.
+            payload = brain.space.pack_for_webgl(
+                brain.dense, raw=isinstance(brain, dataset.DataviewRGB)
+            )
+            self._payloads[name] = payload
+            self.images[name] = payload.frames
+            self.brains[name].update(payload.describe())
 
     @property
     def views(self) -> list[dataset.DataviewJSON]:
@@ -99,16 +72,14 @@ class Package(object):
             (k, np.load(os.path.splitext(v)[0] + ".npz")) for k, v in subjects.items()
         )
         for brain in self.uniques:
-            if isinstance(brain, (dataset.Vertex, dataset.VertexRGB)):
-                data = np.array(self.images[brain.name])[0]
-                npyform = BytesIO()
-                if self.brains[brain.name]["raw"]:
-                    data = data[..., indices[brain.subject]["index"], :]
-                else:
-                    data = data[..., indices[brain.subject]["index"]]
-                np.save(npyform, np.ascontiguousarray(data))
-                npyform.seek(0)
-                self.images[brain.name] = [npyform.read()]
+            # Whether permuting applies is the encoding's business, and only the
+            # per-vertex one says yes -- the default `reorder` returns the frames
+            # untouched without reading the index, so a mosaicked view does not
+            # decompress an index array it has no use for.
+            name = brain.name
+            self.images[name] = self._payloads[name].reorder(
+                self.images[name], indices[brain.subject]
+            )
         for npz in indices.values():
             npz.close()
 
@@ -126,17 +97,3 @@ class Package(object):
         for name, imgs in self.images.items():
             names[name] = [fmt.format(name=name, frame=i) for i in range(len(imgs))]
         return names
-
-
-def _pack_png(mosaic: Union[npt.NDArray[np.float32], npt.NDArray[np.uint8]]) -> bytes:
-    from PIL import Image
-
-    buf = BytesIO()
-    if mosaic.dtype not in (np.float32, np.uint8):
-        raise TypeError
-
-    y, x = mosaic.shape[:2]
-    im = Image.frombuffer("RGBA", (x, y), mosaic.data, "raw", "RGBA", 0, 1)
-    im.save(buf, format="PNG")
-    buf.seek(0)
-    return buf.read()

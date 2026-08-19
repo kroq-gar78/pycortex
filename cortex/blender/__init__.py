@@ -172,10 +172,14 @@ def add_cutdata(fname: str, braindata: Union[dataset.Dataset, dataset.Dataview],
             add_cutdata(fname, data, name=view_name, projection=projection, mesh=mesh)
         return
     braindata = dataset.normalize(braindata)
-    if not isinstance(braindata, dataset.braindata.VertexData):
-        mapped = braindata.map(projection)
-    else:
+    # Asks the space, not the class. This read
+    # `isinstance(braindata, dataset.braindata.VertexData)` -- reaching through the
+    # compatibility module for a class that no longer describes a view, since a
+    # view now *holds* its BrainData rather than being one.
+    if isinstance(braindata.space, dataset.SurfaceSpace):
         mapped = braindata
+    else:
+        mapped = braindata.map(projection)
     left = mapped.left
     right = mapped.right
 

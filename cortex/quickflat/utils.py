@@ -45,27 +45,17 @@ def make_flatmap_image(braindata: Union[dataset.Volume, dataset.Vertex, dataset.
     """
     mask, extents = get_flatmask(braindata.subject, height=height, recache=recache)
     
-    if not hasattr(braindata, "xfmname"):
-        pixmap = get_flatcache(braindata.subject,
-                               None,
-                               height=height,
-                               recache=recache,
-                               **kwargs)
-        
-        if isinstance(braindata, dataset.Vertex2D):
-            data = braindata.raw.vertices
-        else:
-            data = braindata.vertices
-    else:
-        pixmap = get_flatcache(braindata.subject,
-                               braindata.xfmname,
-                               height=height,
-                               recache=recache,
-                               **kwargs)
-        if isinstance(braindata, dataset.Volume2D):
-            data = braindata.raw.volume
-        else:
-            data = braindata.volume
+    # No branch on the spatial kind. This was `not hasattr(braindata, "xfmname")`
+    # selecting between two arms that differed only in which accessor they read --
+    # and inside each, a further `isinstance(..., Volume2D/Vertex2D)` because a 2D
+    # view publishes its colormapped array under a different name. The space says
+    # what to sample through, and every view publishes its array as `dense`.
+    pixmap = get_flatcache(braindata.subject,
+                           braindata.space.xfmname,
+                           height=height,
+                           recache=recache,
+                           **kwargs)
+    data = braindata.dense
 
     if data.shape[0] > 1:
         raise ValueError("Input data was not the correct dimensionality - please provide 3D Volume or 2D Vertex data")

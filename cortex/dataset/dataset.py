@@ -7,7 +7,8 @@ import h5py
 from ..database import db
 from ..xfm import Transform
 
-from .braindata import _hdf_write
+from ._hdf import _hdf_write
+from ._space import VolumeSpace
 from .views import normalize as _vnorm
 from .views import Dataview, Vertex, Volume, _from_hdf_data
 from h5py._hl.files import File
@@ -140,15 +141,18 @@ class Dataset:
             xfms: set[tuple[str, str]] = set()
             masks: set[tuple[str, str, str]] = set()
             for view in self.views.values():
-                # .uniques() is provided by BrainData
                 for data in view.uniques():
-                    subjs.add(data.subject)
-                    if isinstance(data, Volume):
-                        xfms.add((data.subject, data.xfmname))
-                        #custom masks are already packaged by default
-                        #only string masks need to be packed
-                        if isinstance(data._mask, str):
-                            masks.add((data.subject, data.xfmname, data._mask))
+                    space = data.space
+                    subjs.add(space.subject)
+                    # Asks the space rather than the view's class, and asks it for
+                    # `mask_spec` -- what the user passed -- rather than reaching
+                    # for the private `_mask` the old `Volume` stored it in.
+                    if isinstance(space, VolumeSpace):
+                        xfms.add((space.subject, space.xfmname))
+                        # custom masks are already packaged by default;
+                        # only string masks need to be packed
+                        if isinstance(space.mask_spec, str):
+                            masks.add((space.subject, space.xfmname, space.mask_spec))
 
             _pack_subjs(self.h5, subjs)
             _pack_xfms(self.h5, xfms)

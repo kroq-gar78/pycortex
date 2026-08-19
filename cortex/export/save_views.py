@@ -123,7 +123,10 @@ def save_3d_views(
             time.sleep(sleep)
 
         # Add interpolation and layers params only if we have a volume
-        if isinstance(volume, (cortex.Volume, cortex.Volume2D, cortex.VolumeRGB)):
+        # One question about the space, rather than one `isinstance` per (space,
+        # channel-layout) cell -- which is what enumerating the volumetric column
+        # by hand was, and what a third space would have had to be added to.
+        if isinstance(volume.space, cortex.dataset.VolumeSpace):
             interpolation_params = {
                 "surface.{subject}.sampler": interpolation,
                 "surface.{subject}.layers": layers,

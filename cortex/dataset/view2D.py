@@ -1,113 +1,262 @@
-import os
-import json
-from typing import Optional, Union
-import warnings
+"""Two scalar channels through one 2D colormap.
 
+``Dataview2D`` now calls ``Dataview.__init__`` instead of re-setting
+``state``/``attrs``/``priority``/``description`` by hand, and asks
+``space.align`` for the pair of arrays to colormap instead of comparing masks
+inline. What is left in the two concrete classes is a constructor and a repr.
+"""
+
+from __future__ import annotations
+
+import os
+import warnings
+from typing import Any, Optional, Union
+
+import h5py
 import numpy as np
 import numpy.typing as npt
 
 from .. import options
-from .views import Dataview, Volume, Vertex, VolumeRGB, VertexRGB
-from .braindata import BrainData, VolumeData, VertexData
+from ._space import Space, SurfaceSpace, VolumeSpace
+from .braindata import BrainData
+from .views import (
+    Dataview,
+    DataviewJSON,
+    DataviewScalar,
+    Vertex,
+    Volume,
+    _dumps,
+)
 
 default_cmap2D = options.config.get("basic", "default_cmap2D")
 
-class Dataview2D(Dataview):
-    """Abstract base class for 2-dimensional data views.
+
+def _resolve_channels(
+    channels: list[Any],
+    *,
+    space_cls: type[Space],
+    subject: Optional[str],
+    spec: dict[str, Any],
+    argnames: tuple[str, ...],
+) -> tuple[Space, Optional[list[DataviewScalar]]]:
+    """Validate a composite view's channel arguments and find their space.
+
+    Returns the space to build in, plus the channels if they arrived as views and
+    None if they arrived as raw arrays. The two forms cannot be mixed: either
+    every channel is a scalar view and they agree on the space, or none is and the
+    space's arguments must be given explicitly.
+
+    ``Dataview2D`` and ``DataviewRGB`` each carried this, with the same checks in
+    the same order and different wording. ``space1 == space2`` is what collapsed
+    them: the subject/xfmname/mask comparisons were written out by hand.
     """
-    dim1: Dataview
-    dim2: Dataview
+    first = channels[0]
+    if isinstance(first, DataviewScalar):
+        for name, chan in zip(argnames[1:], channels[1:]):
+            if not isinstance(chan, DataviewScalar):
+                raise TypeError(
+                    "%s is not a %s object; if %s is one then all of them must be"
+                    % (name, type(first).__name__, argnames[0])
+                )
+            if chan.subject != first.subject:
+                raise TypeError("%s is from a different subject" % name)
+        if subject is not None and first.subject != subject:
+            raise ValueError(
+                "Subject in channel objects (%r) is different than specified "
+                "subject (%r)" % (first.subject, subject)
+            )
+        for key, value in spec.items():
+            if value is not None and getattr(first.space, key, None) != value:
+                raise ValueError(
+                    "%s in channel objects (%r) is different than specified %s (%r)"
+                    % (key, getattr(first.space, key, None), key, value)
+                )
+        return first.space, [c for c in channels]
 
-    def __init__(self, description: str="", cmap: Optional[str]=None,
-                 vmin: Optional[float]=None, vmax: Optional[float]=None,
-                 vmin2: Optional[float]=None, vmax2: Optional[float]=None, state=None, **kwargs):
+    for name, chan in zip(argnames[1:], channels[1:]):
+        if isinstance(chan, DataviewScalar):
+            raise TypeError(
+                "%s is a view object, so %s must be one as well" % (name, argnames[0])
+            )
+    return space_cls.from_spec(subject, **spec), None
+
+
+class Dataview2D(Dataview):
+    """Abstract base class for 2-dimensional data views."""
+
+    def __init__(
+        self,
+        dim1: DataviewScalar,
+        dim2: DataviewScalar,
+        description: str = "",
+        cmap: Optional[str] = None,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        vmin2: Optional[float] = None,
+        vmax2: Optional[float] = None,
+        state: Any = None,
+        priority: int = 1,
+        **attrs: Any,
+    ) -> None:
+        self.dim1 = dim1
+        self.dim2 = dim2
         self.cmap = cmap or default_cmap2D
-        self.vmin = vmin
-        self.vmax = vmax
-        self.vmin2 = vmin if vmin2 is None else vmin2
-        self.vmax2 = vmax if vmax2 is None else vmax2
+        # Each axis falls back to its own channel's range, which is resolved by
+        # the time it gets here. This used to be done twice -- pre-resolved in the
+        # subclasses, and again here with a *different* rule (vmin2 falling back
+        # to vmin) that the pre-resolution meant could never fire.
+        self.vmin = dim1.vmin if vmin is None else vmin
+        self.vmax = dim1.vmax if vmax is None else vmax
+        self.vmin2 = dim2.vmin if vmin2 is None else vmin2
+        self.vmax2 = dim2.vmax if vmax2 is None else vmax2
+        super().__init__(
+            description=description, state=state, priority=priority, **attrs
+        )
 
-        self.state = state
-        self.attrs = kwargs
-        if 'priority' not in self.attrs:
-            self.attrs['priority'] = 1
-        self.description = description
+    @property
+    def space(self) -> Space:
+        return self.dim1.space
 
-    def uniques(self, collapse=False):
+    def uniques(self, collapse: bool = False):
         yield self.dim1
         yield self.dim2
 
-    def _write_hdf(self, h5, name="data"):
-        self._cls._write_hdf(self.dim1, h5)
-        self._cls._write_hdf(self.dim2, h5)
+    def get_cmapdict(self) -> dict[str, Any]:
+        """Colormap arguments for the *first* axis only.
 
-        viewnode = Dataview._write_hdf(self, h5, name=name)
-        viewnode[0] = json.dumps([[self.dim1.name, self.dim2.name]])
-        viewnode[3] = json.dumps([[self.vmin, self.vmin2]])
-        viewnode[4] = json.dumps([[self.vmax, self.vmax2]])
-        return viewnode
+        The second axis's range has no place in an ``imshow`` call; the 2D
+        colorbar is built separately from all four bounds.
+        """
+        from .views import _lookup_cmap
 
-    def to_json(self, simple=False):
-        sdict = dict(data=[[self.dim1.name, self.dim2.name]],
-            state=self.state, 
-            attrs=self.attrs, 
-            desc=self.description,
-            cmap=[self.cmap] )
+        return dict(cmap=_lookup_cmap(self.cmap), vmin=self.vmin, vmax=self.vmax)
 
-        d1js = self.dim1.to_json()
-        d2js = self.dim2.to_json()
-        sdict.update(dict(
-            vmin = [[self.vmin or d1js['vmin'][0], self.vmin2 or d2js['vmin'][0]]],
-            vmax = [[self.vmax or d1js['vmax'][0], self.vmax2 or d2js['vmax'][0]]],
-            ))
+    def copy(self) -> "Dataview2D":
+        """A view of the same kind over the same two channels.
 
-        if "xfm" in d1js:
-            sdict['xfm'] = [[d1js['xfm'][0], d2js['xfm'][0]]]
+        The composite columns had no working ``copy()`` at all: they inherited
+        ``Dataview.copy``, which splatted ``cmap=``/``vmin=``/``vmax=`` into
+        ``self.__class__(...)``, and their constructors do not accept those in
+        that position.
+        """
+        return type(self)(
+            self.dim1,
+            self.dim2,
+            description=self.description,
+            cmap=self.cmap,
+            vmin=self.vmin,
+            vmax=self.vmax,
+            vmin2=self.vmin2,
+            vmax2=self.vmax2,
+            state=self.state,
+            **self.attrs,
+        )
 
-        return sdict
-
-    def _to_raw(self, data1, data2):
+    # ------------------------------------------------------------------
+    # color
+    # ------------------------------------------------------------------
+    def _to_raw(
+        self, data1: npt.NDArray, data2: npt.NDArray
+    ) -> tuple[npt.NDArray, npt.NDArray, npt.NDArray, npt.NDArray]:
         from matplotlib import pyplot as plt
         from matplotlib.colors import Normalize
+
         cmapdir = options.config.get("webgl", "colormaps")
-        cmap = plt.imread(os.path.join(cmapdir, "%s.png"%self.cmap))
+        cmap = plt.imread(os.path.join(cmapdir, "%s.png" % self.cmap))
         _warn_non_perceptually_uniform_colormap(self.cmap)
 
-        norm1 = Normalize(self.vmin, self.vmax)
-        norm2 = Normalize(self.vmin2, self.vmax2)
-        
-        d1 = np.clip(norm1(data1), 0, 1)
-        d2 = np.clip(1 - norm2(data2), 0, 1)
-        dim1 = np.round(d1 * (cmap.shape[1]-1))
-        # Nans in data seemed to cause weird interaction with conversion to uint32
-        dim1 = np.nan_to_num(dim1).astype(np.uint32) 
-        dim2 = np.round(d2 * (cmap.shape[0]-1))
-        dim2 = np.nan_to_num(dim2).astype(np.uint32)
+        d1 = np.clip(Normalize(self.vmin, self.vmax)(data1), 0, 1)
+        d2 = np.clip(1 - Normalize(self.vmin2, self.vmax2)(data2), 0, 1)
+        # NaNs interact badly with the conversion to uint32.
+        dim1 = np.nan_to_num(np.round(d1 * (cmap.shape[1] - 1))).astype(np.uint32)
+        dim2 = np.nan_to_num(np.round(d2 * (cmap.shape[0] - 1))).astype(np.uint32)
 
         colored = cmap[dim2.ravel(), dim1.ravel()]
-        # map r, g, b, a values between 0 and 255 to avoid problems with
-        # VolumeRGB when plotting flatmaps with quickflat
+        # 0-255 rather than 0-1, to avoid problems in the RGB column downstream.
         colored = (colored * 255).astype(np.uint8)
-        r, g, b, a = colored.T
-        r.shape = dim1.shape
-        g.shape = dim1.shape
-        b.shape = dim1.shape
-        a.shape = dim1.shape
-        # Preserve nan values as alpha = 0
-        aidx = np.logical_or(np.isnan(data1), np.isnan(data2))
-        a[aidx] = 0
-        # Code from main, to handle alpha input, prob better here but not tested.
-        # # Possibly move this above setting nans to alpha = 0;
-        # # Possibly multiply specified alpha by alpha in colormap??
-        # if 'alpha' in self.attrs:
-        #     # Over-write alpha from colormap / nans with alpha arg if provided.
-        #     # Question: Might it be important tokeep alpha as an attr?
-        #     a = self.attrs.pop('alpha')
+        r, g, b, a = (channel.reshape(dim1.shape) for channel in colored.T)
+        a = a.copy()
+        a[np.logical_or(np.isnan(data1), np.isnan(data2))] = 0
         return r, g, b, a
 
     @property
-    def subject(self):
-        return self.dim1.subject
+    def raw(self) -> Dataview:
+        """This view colormapped, as an RGB view of the same space.
+
+        Asks ``space.align`` for a pair of arrays in which position *i* means the
+        same place in both, which is the whole of what ``Volume2D.raw`` spelled
+        out in fifteen lines of mask comparison and ``Vertex2D.raw`` in two.
+        """
+        first, second = self.space.align(self.dim1.braindata, self.dim2.braindata)
+        r, g, b, a = self._to_raw(first, second)
+
+        space = self.space
+        wrap = type(space).scalar_view._from_parts
+        # `alpha` stays an array: the RGB column wraps it with vmin=0/vmax=1, which
+        # is what its NaN masking assigns into it.
+        return type(space).rgb_view(
+            wrap(BrainData(r, space)),
+            wrap(BrainData(g, space)),
+            wrap(BrainData(b, space)),
+            alpha=self.attrs.get("alpha", a),
+            description=self.description,
+            state=self.state,
+            priority=self.priority,
+        )
+
+    @property
+    def dense(self) -> npt.NDArray[np.uint8]:
+        """The array a renderer samples: this view colormapped to uint8 RGBA.
+
+        A 2D view owns no array of its own, so unlike the other two columns this
+        is derived rather than stored.
+        """
+        return self.raw.dense
+
+    # ------------------------------------------------------------------
+    # serialization
+    # ------------------------------------------------------------------
+    def to_json(self, simple: bool = False) -> DataviewJSON:
+        sdict = super().to_json(simple=simple)
+        if simple:
+            return sdict
+        sdict.update(
+            DataviewJSON(
+                data=[[self.dim1.name, self.dim2.name]],
+                cmap=[self.cmap],
+                vmin=[[self.vmin, self.vmin2]],
+                vmax=[[self.vmax, self.vmax2]],
+            )
+        )
+        d1js = self.dim1.to_json()
+        d2js = self.dim2.to_json()
+        if "xfm" in d1js:
+            sdict["xfm"] = [[d1js["xfm"][0], d2js["xfm"][0]]]
+        return sdict
+
+    def _write_cmap_slots(self, view: h5py.Dataset) -> None:
+        view[2] = _dumps([self.cmap])
+        view[3] = _dumps([[self.vmin, self.vmin2]])
+        view[4] = _dumps([[self.vmax, self.vmax2]])
+
+    def _write_hdf(
+        self, h5: Union[h5py.File, h5py.Group], name: str = "data"
+    ) -> h5py.Dataset:
+        self.dim1.braindata._write_hdf(h5)
+        self.dim2.braindata._write_hdf(h5)
+        return self._write_view_node(
+            h5,
+            name,
+            [[self.dim1.name, self.dim2.name]],
+            self._view_xfmname(),
+        )
+
+    def _view_xfmname(self) -> Optional[list[Any]]:
+        """Slot 7. One transform name per dimension, for a space that has one."""
+        if self.space.xfmname is None:
+            return None
+        return [[self.dim1.space.xfmname, self.dim2.space.xfmname]]
+
 
 class Volume2D(Dataview2D):
     """
@@ -127,85 +276,80 @@ class Volume2D(Dataview2D):
         dim1 must be a Volume from which the subject can be extracted.
     xfmname : str, optional
         Transform name. Must exist in the pycortex database. If not given,
-        dim1 must be a Volume from which the subject can be extracted.
+        dim1 must be a Volume from which the transform can be extracted.
     description : str, optional
         String describing this dataset. Displayed in webgl viewer.
     cmap : str, optional
-        Colormap (or colormap name) to use. If not given defaults to the 
-        `default_cmap2d` in your pycortex options.cfg file.
+        Colormap (or colormap name) to use. If not given defaults to the
+        ``default_cmap2D`` in your pycortex options.cfg file.
     vmin : float, optional
-        Minimum value in colormap for dim1. If not given defaults to TODO:WHAT
+        Minimum value in colormap for dim1. Defaults to dim1's own vmin.
     vmax : float, optional
-        Maximum value in colormap for dim1. If not given defaults to TODO:WHAT
+        Maximum value in colormap for dim1. Defaults to dim1's own vmax.
     vmin2 : float, optional
-        Minimum value in colormap for dim2. If not given defaults to TODO:WHAT
+        Minimum value in colormap for dim2. Defaults to dim2's own vmin.
     vmax2 : float, optional
-        Maximum value in colormap for dim2. If not given defaults to TODO:WHAT
+        Maximum value in colormap for dim2. Defaults to dim2's own vmax.
     **kwargs
-        All additional arguments in kwargs are passed to the VolumeData and Dataview
-
+        All additional arguments are stored in ``attrs``.
     """
-    _cls = VolumeData
-    dim1: Volume
-    dim2: Volume
 
-    def __init__(self, dim1: Union[npt.NDArray, Volume], dim2: Union[npt.NDArray, Volume], subject: Optional[str]=None, xfmname: Optional[str]=None, description: str="", cmap: Optional[str]=None,
-                 vmin: Optional[float]=None, vmax: Optional[float]=None, vmin2: Optional[float]=None, vmax2: Optional[float]=None, **kwargs):
-        if isinstance(dim1, self._cls):
-            if subject is not None or xfmname is not None:
-                raise TypeError("Subject and xfmname cannot be specified with Volumes")
-            if not isinstance(dim2, self._cls) or dim2.subject != dim1.subject:
-                raise TypeError("Invalid data for second dimension")
-            self.dim1 = dim1
-            self.dim2 = dim2
+    def __init__(
+        self,
+        dim1: Union[npt.NDArray, Volume],
+        dim2: Union[npt.NDArray, Volume],
+        subject: Optional[str] = None,
+        xfmname: Optional[str] = None,
+        description: str = "",
+        cmap: Optional[str] = None,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        vmin2: Optional[float] = None,
+        vmax2: Optional[float] = None,
+        **kwargs: Any,
+    ) -> None:
+        space, views = _resolve_channels(
+            [dim1, dim2],
+            space_cls=VolumeSpace,
+            subject=subject,
+            spec={"xfmname": xfmname},
+            argnames=("dim1", "dim2"),
+        )
+        if views is None:
+            chan1 = Volume(np.asarray(dim1), space.subject, space.xfmname, vmin=vmin, vmax=vmax)
+            chan2 = Volume(np.asarray(dim2), space.subject, space.xfmname, vmin=vmin2, vmax=vmax2)
         else:
-            if isinstance(dim2, self._cls):
-                raise TypeError("If dim2 is a Volume, dim1 must be a Volume as well")
-            if subject is None or xfmname is None:
-                raise TypeError("Subject and xfmname must be specified with raw data")
-            self.dim1 = Volume(dim1, subject, xfmname, vmin=vmin, vmax=vmax)
-            self.dim2 = Volume(dim2, subject, xfmname, vmin=vmin2, vmax=vmax2)
+            chan1, chan2 = views
 
-        vmin = self.dim1.vmin if vmin is None else vmin
-        vmin2 = self.dim2.vmin if vmin2 is None else vmin2
-        vmax = self.dim1.vmax if vmax is None else vmax
-        vmax2 = self.dim2.vmax if vmax2 is None else vmax2
-
-        super().__init__(description=description, cmap=cmap, vmin=vmin,
-                                       vmax=vmax, vmin2=vmin2, vmax2=vmax2, **kwargs)
-
-    def __repr__(self):
-        return "<2D volumetric data for (%s, %s)>"%(self.dim1.subject, self.dim1.xfmname)
-
-    def _write_hdf(self, h5, name="data"):
-        viewnode = super()._write_hdf(h5, name)
-        viewnode[7] = json.dumps([[self.dim1.xfmname, self.dim2.xfmname]])
-        return viewnode
+        super().__init__(
+            chan1,
+            chan2,
+            description=description,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            vmin2=vmin2,
+            vmax2=vmax2,
+            **kwargs,
+        )
 
     @property
-    def raw(self) -> VolumeRGB:
-        """VolumeRGB object containing the colormapped data from this object.
+    def xfmname(self) -> str:
+        return self.dim1.space.xfmname
+
+    @property
+    def volume(self) -> npt.NDArray:
+        """5D volume (t, z, y, x, rgba) of this view's colormapped data.
+
+        ``Volume2D`` had no such accessor at all, though ``Vertex2D`` had
+        ``vertices``: they were written per class rather than per column, and this
+        one was missed.
         """
-        if self.dim1.xfmname != self.dim2.xfmname:
-            raise ValueError("Both Volumes must have same xfmname to generate single raw volume")
+        return self.dense
 
-        if ((self.dim1.linear and self.dim2.linear) and
-            (self.dim1.mask.shape == self.dim2.mask.shape) and
-            np.all(self.dim1.mask == self.dim2.mask)):
-            r, g, b, a = self._to_raw(self.dim1.data, self.dim2.data)
-        else:
-            r, g, b, a = self._to_raw(self.dim1.volume, self.dim2.volume)
-        # Allow manual override of alpha channel
-        kws = dict(subject=self.dim1.subject, xfmname=self.dim1.xfmname, 
-            state=self.state, description=self.description, **self.attrs)
-        if not 'alpha' in self.attrs:
-            kws['alpha'] = a
-        return VolumeRGB(r, g, b, **kws)
+    def __repr__(self) -> str:
+        return "<2D volumetric data for (%s, %s)>" % (self.subject, self.xfmname)
 
-
-    @property
-    def xfmname(self):
-        return self.dim1.xfmname
 
 class Vertex2D(Dataview2D):
     """
@@ -226,71 +370,68 @@ class Vertex2D(Dataview2D):
     description : str, optional
         String describing this dataset. Displayed in webgl viewer.
     cmap : str, optional
-        Colormap (or colormap name) to use. If not given defaults to the 
-        `default_cmap2d` in your pycortex options.cfg file.
+        Colormap (or colormap name) to use. If not given defaults to the
+        ``default_cmap2D`` in your pycortex options.cfg file.
     vmin : float, optional
-        Minimum value in colormap for dim1. If not given defaults to TODO:WHAT
+        Minimum value in colormap for dim1. Defaults to dim1's own vmin.
     vmax : float, optional
-        Maximum value in colormap for dim1. If not given defaults to TODO:WHAT
+        Maximum value in colormap for dim1. Defaults to dim1's own vmax.
     vmin2 : float, optional
-        Minimum value in colormap for dim2. If not given defaults to TODO:WHAT
+        Minimum value in colormap for dim2. Defaults to dim2's own vmin.
     vmax2 : float, optional
-        Maximum value in colormap for dim2. If not given defaults to TODO:WHAT
+        Maximum value in colormap for dim2. Defaults to dim2's own vmax.
     **kwargs
-        All additional arguments in kwargs are passed to the VolumeData and Dataview
-
+        All additional arguments are stored in ``attrs``.
     """
-    _cls = VertexData
-    blend_curvature = _cls.blend_curvature  # hacky inheritance
-    dim1: Vertex
-    dim2: Vertex
 
-    def __init__(self, dim1: Union[npt.NDArray, Vertex], dim2: Union[npt.NDArray, Vertex], subject: Optional[str]=None, description: str="", cmap: Optional[str]=None,
-                 vmin: Optional[float]=None, vmax: Optional[float]=None, vmin2: Optional[float]=None, vmax2: Optional[float]=None, **kwargs):
-        if isinstance(dim1, VertexData):
-            if subject is not None:
-                raise TypeError("Subject cannot be specified with Vertex")
-            if not isinstance(dim2, VertexData) or dim2.subject != dim1.subject:
-                raise TypeError("Invalid data for second dimension")
-            self.dim1 = dim1
-            self.dim2 = dim2
+    def __init__(
+        self,
+        dim1: Union[npt.NDArray, Vertex],
+        dim2: Union[npt.NDArray, Vertex],
+        subject: Optional[str] = None,
+        description: str = "",
+        cmap: Optional[str] = None,
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        vmin2: Optional[float] = None,
+        vmax2: Optional[float] = None,
+        **kwargs: Any,
+    ) -> None:
+        space, views = _resolve_channels(
+            [dim1, dim2],
+            space_cls=SurfaceSpace,
+            subject=subject,
+            spec={},
+            argnames=("dim1", "dim2"),
+        )
+        if views is None:
+            chan1 = Vertex(np.asarray(dim1), space.subject, vmin=vmin, vmax=vmax)
+            chan2 = Vertex(np.asarray(dim2), space.subject, vmin=vmin2, vmax=vmax2)
         else:
-            if isinstance(dim2, self._cls):
-                raise TypeError("If dim2 is a Vertex, dim1 must be a Vertex as well")
-            if subject is None:
-                raise TypeError("Subject must be specified with raw data")
-            self.dim1 = Vertex(dim1, subject, vmin=vmin, vmax=vmax)
-            self.dim2 = Vertex(dim2, subject, vmin=vmin2, vmax=vmax2)
+            chan1, chan2 = views
 
-        vmin = self.dim1.vmin if vmin is None else vmin
-        vmin2 = self.dim2.vmin if vmin2 is None else vmin2
-        vmax = self.dim1.vmax if vmax is None else vmax
-        vmax2 = self.dim2.vmax if vmax2 is None else vmax2
-
-        super().__init__(description=description, cmap=cmap,
-                                       vmin=vmin, vmax=vmax, vmin2=vmin2,
-                                       vmax2=vmax2, **kwargs)
-
-    def __repr__(self):
-        return "<2D vertex data for (%s)>"%self.dim1.subject
+        super().__init__(
+            chan1,
+            chan2,
+            description=description,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            vmin2=vmin2,
+            vmax2=vmax2,
+            **kwargs,
+        )
 
     @property
-    def raw(self) -> VertexRGB:
-        """VertexRGB object containing the colormapped data from this object.
-        """
-        r, g, b, a = self._to_raw(self.dim1.data, self.dim2.data)
-        # Allow manual override of alpha channel
-        kws = dict(subject=self.dim1.subject)
-        if not 'alpha' in self.attrs:
-            kws['alpha'] = a
-        return VertexRGB(r, g, b, **kws)
+    def vertices(self) -> npt.NDArray:
+        """3D array (t, v, rgba) of this view's colormapped data."""
+        return self.dense
 
-    @property
-    def vertices(self):
-        return self.raw.vertices
+    def __repr__(self) -> str:
+        return "<2D vertex data for (%s)>" % self.subject
 
 
-def _warn_non_perceptually_uniform_colormap(cmap):
+def _warn_non_perceptually_uniform_colormap(cmap: Any) -> None:
     mapping = {
         "BuOr_2D": "PU_BuOr_covar",
         "RdBu_covar": "PU_RdBu_covar",
@@ -300,5 +441,8 @@ def _warn_non_perceptually_uniform_colormap(cmap):
         "hot_alpha": "fire_alpha",
     }
     if cmap in mapping:
-        warnings.warn("Colormap %r is not perceptually uniform. Consider using"
-                      " %r instead." % (cmap, mapping[cmap]), UserWarning)
+        warnings.warn(
+            "Colormap %r is not perceptually uniform. Consider using %r instead."
+            % (cmap, mapping[cmap]),
+            UserWarning,
+        )
