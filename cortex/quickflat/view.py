@@ -2,7 +2,7 @@ import binascii
 import io
 import os
 import tempfile
-from typing import IO, Optional, Sequence, Union
+from typing import IO, BinaryIO, Mapping, Optional, Sequence, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -239,7 +239,7 @@ def make_figure(braindata: dataset.Dataview, recache: bool=False, pixelwise: boo
 
     # Add (apply) cutout of flatmap
     if cutout is not None:
-        extents = composite.add_cutout(ax, cutout, dataview, layers, overlay_file=overlay_file)
+        composite.add_cutout(ax, cutout, dataview, layers, overlay_file=overlay_file)
 
     if with_colorbar:
         colorbar_location = _check_colorbar_location(colorbar_location)
@@ -442,7 +442,9 @@ def make_svg(fname, braindata: dataset.Dataview, with_labels: bool=False, with_c
     roipack.get_svg(fname, layers=layers, labels=with_labels, with_ims=image_data)
 
 
-def make_gif(output_destination, volumes, frame_duration=1, **figure_kwargs):
+def make_gif(output_destination: Union[str, BinaryIO],
+             volumes: Mapping[str, dataset.Dataview],
+             frame_duration: int=1, **figure_kwargs) -> Union[str, BinaryIO]:
     """Make an animated gif from several pycortex volumes
 
     Parameters
@@ -478,7 +480,7 @@ def make_gif(output_destination, volumes, frame_duration=1, **figure_kwargs):
         path = os.path.join(tmpdir.name, str(i) + '.png')
         fig.savefig(path)
         images.append(imageio.imread(path))
-        _ = plt.close(fig)
+        plt.close(fig)
 
     tmpdir.cleanup()
 
