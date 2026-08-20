@@ -167,6 +167,32 @@ composition is still uniform and the diamond is still gone — a channel is a
 `Dataview` over a `BrainData` — but the layering is four deep for a composite
 rather than three.
 
+Both composite columns are generic in that channel type, over one covariant
+TypeVar bound to `DataviewScalar`, so `Volume2D.dim1` is a `Volume` and
+`VertexRGB.alpha` is a `Vertex` without either class re-declaring anything.
+`alpha` is what earns it: a property's return type cannot be narrowed by
+re-annotation, only by re-implementing the property, so it would otherwise exist
+once per RGB class. Covariance is sound because the channels are read-only
+properties backed by private fields, set once in `__init__` — pinned by
+`test_the_channels_are_read_only`. Two limits are worth knowing rather than
+discovering: mypy allows a covariant TypeVar in `__init__` parameters and in
+return position but **not** in an ordinary method parameter, so the `alpha` setter
+takes the base channel type; and the space-agnostic resolvers can only promise
+that base type, so each concrete constructor casts once — the concrete class
+stating what its own parameter already fixed.
+
+**What the TypeVar does not buy is `.raw`.** Narrowing that would need `Space`
+generic over its whole view family *and* threaded through every column, because a
+type parameter cannot be projected out of another type parameter — higher-kinded
+types, which Python does not have. Measured on a standalone probe: with the space
+as the only parameter, `self.space.rgb_view()` reveals as `Any`; with the family
+threaded through it reveals correctly, at the price of three TypeVars on all five
+bases and each concrete class naming the whole family. Six cells of the grid have
+to be named somewhere, and typing this layering does not reduce that count — it
+moves it from base-class lists into type-argument lists and makes it longer. So
+`.raw` stays typed as the base column here, and a caller wanting `raw.volume`
+casts.
+
 **2. `isinstance(x, VolumeData)` does not survive.** §4.1 promises the public
 surface does not move, and it does not: all six classes keep their names and their
 `isinstance` behaviour. But `VolumeData`/`VertexData` are non-public names, they

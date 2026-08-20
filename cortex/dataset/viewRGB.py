@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import colorsys
 import warnings
-from typing import Any, Literal, Optional, TypeVar, Union, cast
+from typing import Any, Generic, Literal, Optional, TypeVar, Union, cast
 
 import h5py
 import numpy as np
@@ -21,7 +21,7 @@ from ._hdf import _hash
 from ._space import Space, SurfaceSpace, VolumeSpace
 from .braindata import BrainData
 from .view2D import _resolve_channels
-from .views import Dataview, DataviewJSON, DataviewScalar, Vertex, Volume
+from .views import Dataview, DataviewJSON, DataviewScalar, ScalarT, Vertex, Volume
 
 default_cmap = options.config.get("basic", "default_cmap")
 
@@ -277,14 +277,20 @@ def _channel_array(channel: Any) -> npt.NDArray:
     return channel.data if isinstance(channel, DataviewScalar) else channel
 
 
-class DataviewRGB(Dataview):
-    """Abstract base class for RGB data views."""
+class DataviewRGB(Dataview, Generic[ScalarT]):
+    """Abstract base class for RGB data views.
+
+    Generic in the channel type, so ``VolumeRGB.red`` is a ``Volume`` and
+    ``VertexRGB.alpha`` is a ``Vertex``. That last one is why the TypeVar earns
+    its keep: a property's return type cannot be narrowed by re-annotation, only
+    by re-implementing the property, so ``alpha`` would otherwise exist twice.
+    """
 
     def __init__(
         self,
-        red: DataviewScalar,
-        green: DataviewScalar,
-        blue: DataviewScalar,
+        red: ScalarT,
+        green: ScalarT,
+        blue: ScalarT,
         alpha: Optional[Union[npt.NDArray, DataviewScalar]] = None,
         subject: Optional[str] = None,
         description: str = "",
@@ -292,9 +298,9 @@ class DataviewRGB(Dataview):
         priority: int = 1,
         **attrs: Any,
     ) -> None:
-        self.red = red
-        self.green = green
-        self.blue = blue
+        self._red = red
+        self._green = green
+        self._blue = blue
         # `_alpha`, not the `alpha` property: the property *builds* one when none
         # was given, so testing it is always true. That is what made `uniques`
         # yield a synthesized alpha and `_write_hdf` save it -- and a saved
@@ -319,6 +325,18 @@ class DataviewRGB(Dataview):
         )
 
     @property
+    def red(self) -> ScalarT:
+        return self._red
+
+    @property
+    def green(self) -> ScalarT:
+        return self._green
+
+    @property
+    def blue(self) -> ScalarT:
+        return self._blue
+
+    @property
     def space(self) -> Space:
         return self.red.space
 
@@ -336,7 +354,7 @@ class DataviewRGB(Dataview):
             if self._alpha is not None:
                 yield self.alpha
 
-    def copy(self) -> "DataviewRGB":
+    def copy(self) -> "DataviewRGB[ScalarT]":
         return type(self)(
             self.red,
             self.green,
@@ -351,7 +369,7 @@ class DataviewRGB(Dataview):
     # alpha
     # ------------------------------------------------------------------
     @property
-    def alpha(self) -> DataviewScalar:
+    def alpha(self) -> ScalarT:
         """The alpha channel, synthesized fully-opaque if none was given."""
         alpha = self._alpha
         if alpha is None:
@@ -376,10 +394,13 @@ class DataviewRGB(Dataview):
         stacked = np.array([c.dense for c in (self.red, self.green, self.blue)])
         self._mask_alpha(alpha, np.isnan(stacked).any(axis=0))
         self._mask_alpha(alpha, self._nan_mask)
-        return alpha
+        return cast(ScalarT, alpha)
 
     @alpha.setter
     def alpha(self, alpha: Optional[Union[npt.NDArray, DataviewScalar]]) -> None:
+        # Takes the *base* channel type, not ScalarT: mypy allows a covariant
+        # TypeVar in __init__ parameters and in return position, but not in an
+        # ordinary method parameter.
         self._alpha = alpha
 
     def _mask_alpha(
@@ -504,7 +525,7 @@ def _resolve_rgb_channels(
     vmax: Optional[Union[float, tuple]],
     autorange: str,
     alpha: Any,
-) -> tuple[DataviewScalar, DataviewScalar, DataviewScalar, Any]:
+) -> tuple[tuple[DataviewScalar, DataviewScalar, DataviewScalar], Any]:
     """The three channels as scalar views, remapping colors if asked.
 
     Both concrete RGB classes ran this same forty-line decision twice each, once
@@ -528,7 +549,7 @@ def _resolve_rgb_channels(
     )
     if passthrough:
         if views is not None:
-            return views[0], views[1], views[2], alpha
+            return (views[0], views[1], views[2]), alpha
         for name, chan in zip(("channel2", "channel3"), channels[1:]):
             if not isinstance(chan, np.ndarray):
                 raise TypeError(
@@ -538,8 +559,7 @@ def _resolve_rgb_channels(
             wrap(BrainData(channels[0], space)),
             wrap(BrainData(channels[1], space)),
             wrap(BrainData(channels[2], space)),
-            alpha,
-        )
+        ), alpha
 
     if views is None:
         for chan in channels[1:]:
@@ -565,11 +585,10 @@ def _resolve_rgb_channels(
         wrap(BrainData(red, space)),
         wrap(BrainData(green, space)),
         wrap(BrainData(blue, space)),
-        alpha,
-    )
+    ), alpha
 
 
-class VolumeRGB(DataviewRGB):
+class VolumeRGB(DataviewRGB[Volume]):
     """
     Contains RGB (or RGBA) colors for each voxel in a volumetric dataset.
     Includes information about the subject and transform for the data.
@@ -644,7 +663,7 @@ class VolumeRGB(DataviewRGB):
         autorange: Literal["shared", "individual"] = "individual",
         priority: int = 1,
     ) -> None:
-        red, green, blue, resolved_alpha = _resolve_rgb_channels(
+        chans, resolved_alpha = _resolve_rgb_channels(
             (channel1, channel2, channel3),
             space_cls=VolumeSpace,
             subject=subject,
@@ -657,6 +676,7 @@ class VolumeRGB(DataviewRGB):
             autorange=autorange,
             alpha=alpha,
         )
+        red, green, blue = cast(tuple[Volume, Volume, Volume], chans)
         super().__init__(
             red,
             green,
@@ -685,7 +705,7 @@ class VolumeRGB(DataviewRGB):
         return "<RGB volumetric data for (%s, %s)>" % (self.subject, self.xfmname)
 
 
-class VertexRGB(DataviewRGB):
+class VertexRGB(DataviewRGB[Vertex]):
     """
     Contains RGB (or RGBA) colors for each vertex in a surface dataset.
     Includes information about the subject.
@@ -752,7 +772,7 @@ class VertexRGB(DataviewRGB):
         autorange: Literal["shared", "individual"] = "individual",
         priority: int = 1,
     ) -> None:
-        r, g, b, resolved_alpha = _resolve_rgb_channels(
+        chans, resolved_alpha = _resolve_rgb_channels(
             (red, green, blue),
             space_cls=SurfaceSpace,
             subject=subject,
@@ -765,6 +785,7 @@ class VertexRGB(DataviewRGB):
             autorange=autorange,
             alpha=alpha,
         )
+        r, g, b = cast(tuple[Vertex, Vertex, Vertex], chans)
         super().__init__(
             r,
             g,

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import warnings
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Generic, Optional, Union, cast
 
 import h5py
 import numpy as np
@@ -23,10 +23,16 @@ from .views import (
     Dataview,
     DataviewJSON,
     DataviewScalar,
+    ScalarT,
     Vertex,
     Volume,
     _dumps,
 )
+
+if TYPE_CHECKING:
+    # Annotation only: `viewRGB` imports `_resolve_channels` from this module, so a
+    # runtime import here would close the cycle.
+    from .viewRGB import DataviewRGB
 
 default_cmap2D = options.config.get("basic", "default_cmap2D")
 
@@ -81,13 +87,19 @@ def _resolve_channels(
     return space_cls.from_spec(subject, **spec), None
 
 
-class Dataview2D(Dataview):
-    """Abstract base class for 2-dimensional data views."""
+class Dataview2D(Dataview, Generic[ScalarT]):
+    """Abstract base class for 2-dimensional data views.
+
+    Generic in the channel type, so ``Volume2D.dim1`` is a ``Volume`` and
+    ``Vertex2D.dim1`` is a ``Vertex`` without either class re-declaring them. The
+    channels are read-only, which is what makes treating this class as covariant
+    in that type sound.
+    """
 
     def __init__(
         self,
-        dim1: DataviewScalar,
-        dim2: DataviewScalar,
+        dim1: ScalarT,
+        dim2: ScalarT,
         description: str = "",
         cmap: Optional[str] = None,
         vmin: Optional[float] = None,
@@ -98,8 +110,8 @@ class Dataview2D(Dataview):
         priority: int = 1,
         **attrs: Any,
     ) -> None:
-        self.dim1 = dim1
-        self.dim2 = dim2
+        self._dim1 = dim1
+        self._dim2 = dim2
         self.cmap = cmap or default_cmap2D
         # Each axis falls back to its own channel's range, which is resolved by
         # the time it gets here. This used to be done twice -- pre-resolved in the
@@ -112,6 +124,14 @@ class Dataview2D(Dataview):
         super().__init__(
             description=description, state=state, priority=priority, **attrs
         )
+
+    @property
+    def dim1(self) -> ScalarT:
+        return self._dim1
+
+    @property
+    def dim2(self) -> ScalarT:
+        return self._dim2
 
     @property
     def space(self) -> Space:
@@ -131,7 +151,7 @@ class Dataview2D(Dataview):
 
         return dict(cmap=_lookup_cmap(self.cmap), vmin=self.vmin, vmax=self.vmax)
 
-    def copy(self) -> "Dataview2D":
+    def copy(self) -> "Dataview2D[ScalarT]":
         """A view of the same kind over the same two channels.
 
         The composite columns had no working ``copy()`` at all: they inherited
@@ -211,7 +231,7 @@ class Dataview2D(Dataview):
         A 2D view owns no array of its own, so unlike the other two columns this
         is derived rather than stored.
         """
-        return self.raw.dense
+        return cast("DataviewRGB[Any]", self.raw).dense
 
     # ------------------------------------------------------------------
     # serialization
@@ -258,7 +278,7 @@ class Dataview2D(Dataview):
         return [[self.dim1.space.xfmname, self.dim2.space.xfmname]]
 
 
-class Volume2D(Dataview2D):
+class Volume2D(Dataview2D[Volume]):
     """
     Contains two 3D volumes for simultaneous visualization. Includes information
     on how the volumes should be jointly colormapped.
@@ -319,7 +339,10 @@ class Volume2D(Dataview2D):
             chan1 = Volume(np.asarray(dim1), space.subject, space.xfmname, vmin=vmin, vmax=vmax)
             chan2 = Volume(np.asarray(dim2), space.subject, space.xfmname, vmin=vmin2, vmax=vmax2)
         else:
-            chan1, chan2 = views
+            # `_resolve_channels` is space-agnostic, so it can only promise the
+            # base channel type. The cast is where this class states what its
+            # generic parameter already fixed.
+            chan1, chan2 = cast(tuple[Volume, Volume], tuple(views))
 
         super().__init__(
             chan1,
@@ -351,7 +374,7 @@ class Volume2D(Dataview2D):
         return "<2D volumetric data for (%s, %s)>" % (self.subject, self.xfmname)
 
 
-class Vertex2D(Dataview2D):
+class Vertex2D(Dataview2D[Vertex]):
     """
     Contains two vertex maps for simultaneous visualization. Includes information
     on how the maps should be jointly colormapped.
@@ -408,7 +431,7 @@ class Vertex2D(Dataview2D):
             chan1 = Vertex(np.asarray(dim1), space.subject, vmin=vmin, vmax=vmax)
             chan2 = Vertex(np.asarray(dim2), space.subject, vmin=vmin2, vmax=vmax2)
         else:
-            chan1, chan2 = views
+            chan1, chan2 = cast(tuple[Vertex, Vertex], tuple(views))
 
         super().__init__(
             chan1,

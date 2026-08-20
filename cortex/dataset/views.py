@@ -32,7 +32,17 @@ import json
 import os
 import sys
 from abc import ABC, abstractmethod
-from typing import Any, Literal, Optional, TypedDict, Union, cast, overload
+from typing import (
+    Any,
+    Generic,
+    Literal,
+    Optional,
+    TypedDict,
+    TypeVar,
+    Union,
+    cast,
+    overload,
+)
 
 if sys.version_info < (3, 11):
     from typing_extensions import NotRequired, Self
@@ -533,6 +543,22 @@ class DataviewScalar(Dataview):
         if value is None:
             return np.random.randn(*shape)
         return np.ones(shape) * value
+
+
+#: The channel type of a composite view. One TypeVar, covariant, bound to the
+#: scalar column -- so ``Volume2D.dim1`` is a ``Volume`` and ``VertexRGB.alpha`` is
+#: a ``Vertex`` without either class re-declaring anything.
+#:
+#: Covariance is what lets ``Dataview2D[DataviewScalar]`` accept a ``Volume2D``,
+#: which an invariant parameter would reject. It is sound because the channels are
+#: read-only properties backed by private fields, set once in ``__init__``.
+#:
+#: This is the *cheap* half of typing the composite columns. It cannot narrow
+#: ``.raw``: that would need the space to be generic over its whole view family and
+#: threaded through every column, because a type parameter cannot be projected out
+#: of another type parameter. Each concrete class restates ``raw``'s return type
+#: instead -- see COMPOSITION.md.
+ScalarT = TypeVar("ScalarT", bound="DataviewScalar", covariant=True)
 
 
 def _lookup_cmap(name: Any) -> Colormap:

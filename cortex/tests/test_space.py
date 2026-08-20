@@ -361,3 +361,55 @@ def test_a_third_space_reaches_the_browser_by_picking_an_encoding():
     assert pkg.images[view.name][0].dtype == np.float32
     assert record["raw"] is False
     assert "mosaic" not in record  # the JS reads this as "per-vertex attributes"
+
+
+def test_a_composite_view_exposes_its_channels_at_the_concrete_type():
+    """One TypeVar, so `Volume2D.dim1` is a `Volume` and `VertexRGB.alpha` a `Vertex`.
+
+    The runtime half of what the generic parameter buys; the static half is that
+    ``v2d.dim1.mask`` and ``rgb.alpha.llen`` resolve without a cast, which only
+    mypy can check. Before the TypeVar these were typed as the base column, so
+    every space-specific member reached through a channel needed one.
+
+    ``alpha`` is the case that earns it: a property's return type cannot be
+    narrowed by re-annotation, only by re-implementing the property, so it would
+    otherwise have to exist once per RGB class.
+    """
+    vol = np.random.randn(*volshape)
+    vtx = np.random.randn(nverts)
+
+    v2d = cortex.Volume2D(vol, vol * 2, subj, xfmname)
+    x2d = cortex.Vertex2D(vtx, vtx * 2, subj)
+    assert type(v2d.dim1) is cortex.Volume and type(v2d.dim2) is cortex.Volume
+    assert type(x2d.dim1) is cortex.Vertex
+
+    rgb = cortex.VolumeRGB(vol, vol * 2, vol * 3, subj, xfmname)
+    xrgb = cortex.VertexRGB(vtx, vtx * 2, vtx * 3, subj)
+    assert type(rgb.red) is cortex.Volume and type(rgb.alpha) is cortex.Volume
+    assert type(xrgb.blue) is cortex.Vertex and type(xrgb.alpha) is cortex.Vertex
+
+    # space-specific members, reached through a channel
+    assert v2d.dim1.mask is None
+    assert xrgb.alpha.llen == x2d.dim1.space.llen
+
+
+def test_the_channels_are_read_only():
+    """What makes treating the composite columns as covariant sound.
+
+    ``Dataview2D[DataviewScalar]`` accepts a ``Volume2D`` only because the TypeVar
+    is covariant, and covariance is only sound while nothing rebinds a channel.
+    The arrays behind them stay mutable; it is the binding that is fixed.
+    """
+    vol = np.random.randn(*volshape)
+    v2d = cortex.Volume2D(vol, vol * 2, subj, xfmname)
+    rgb = cortex.VolumeRGB(vol, vol * 2, vol * 3, subj, xfmname)
+
+    for obj, attr in ((v2d, "dim1"), (v2d, "dim2"), (rgb, "red"), (rgb, "green")):
+        with pytest.raises(AttributeError):
+            setattr(obj, attr, None)
+
+    # `alpha` keeps its setter: it is what an RGB view is built with, and the
+    # setter takes the base channel type, since mypy allows a covariant TypeVar in
+    # a return position but not in an ordinary method parameter.
+    rgb.alpha = np.ones(volshape)
+    assert (rgb.volume[..., 3] == 255).all()
