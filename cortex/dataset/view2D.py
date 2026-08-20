@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import warnings
-from typing import Any, Generic, Iterator, Optional, TypeVar, Union, cast
+from typing import Any, Generic, Iterator, Mapping, Optional, TypeVar, Union, cast
 
 if sys.version_info < (3, 11):
     from typing_extensions import Self
@@ -61,10 +61,16 @@ class Dataview2D(RenderableView, Generic[ScalarT]):
         vmin2: Optional[float] = None,
         vmax2: Optional[float] = None,
         state: Any = None,
-        **kwargs: Any,
+        alpha: Optional[npt.NDArray] = None,
+        priority: int = 1,
+        attrs: Optional[Mapping[str, Any]] = None,
     ) -> None:
         self._dim1 = dim1
         self._dim2 = dim2
+        #: Overrides the alpha channel the 2D colormap would produce. Was read out
+        #: of ``attrs`` under the key ``"alpha"``, which only worked because every
+        #: constructor ended in ``**kwargs``; a real parameter says it exists.
+        self._alpha = alpha
         self.cmap = cmap or default_cmap2D
         # Each axis falls back to its own channel's range. This used to be done
         # twice: the subclasses pre-resolved it from the channels, and this base
@@ -74,7 +80,9 @@ class Dataview2D(RenderableView, Generic[ScalarT]):
         self.vmax = dim1.vmax if vmax is None else vmax
         self.vmin2 = dim2.vmin if vmin2 is None else vmin2
         self.vmax2 = dim2.vmax if vmax2 is None else vmax2
-        super().__init__(description=description, state=state, **kwargs)
+        super().__init__(
+            description=description, state=state, priority=priority, attrs=attrs
+        )
 
     @property
     def dim1(self) -> ScalarT:
@@ -132,6 +140,7 @@ class Dataview2D(RenderableView, Generic[ScalarT]):
             vmin2=self.vmin2,
             vmax2=self.vmax2,
             state=self.state,
+            alpha=self._alpha,
             attrs=self.attrs,
         )
 
@@ -286,23 +295,17 @@ class Dataview2D(RenderableView, Generic[ScalarT]):
         Goes through :meth:`BrainSpace.wrap_rgb`, so neither subclass names a
         concrete RGB class and a new space's 2D view gets ``raw`` for free.
         """
-        kws = self._raw_kwargs()
-        # An explicit `alpha` attr overrides the colormap's alpha channel.
-        alpha = kws.pop("alpha", a)
-        return self.space.wrap_rgb(r, g, b, alpha, **kws)
+        # An explicit `alpha=` overrides the colormap's alpha channel.
+        alpha = a if self._alpha is None else self._alpha
+        return self.space.wrap_rgb(r, g, b, alpha, **self._raw_kwargs())
 
     def _raw_kwargs(self) -> dict[str, Any]:
-        """View metadata to forward onto the RGB view built by :attr:`raw`.
-
-        Only the keys the RGB constructors accept; ``attrs`` may hold anything.
-        """
-        kws: dict[str, Any] = dict(
-            state=self.state, description=self.description
+        """View metadata to forward onto the RGB view built by :attr:`raw`."""
+        return dict(
+            state=self.state,
+            description=self.description,
+            priority=self.priority,
         )
-        for key in ("priority", "alpha"):
-            if key in self.attrs:
-                kws[key] = self.attrs[key]
-        return kws
 
 
 class Volume2D(Dataview2D[Volume], VolumetricView):
@@ -340,12 +343,16 @@ class Volume2D(Dataview2D[Volume], VolumetricView):
         Minimum value in colormap for dim2. Defaults to dim2's own vmin.
     vmax2 : float, optional
         Maximum value in colormap for dim2. Defaults to dim2's own vmax.
-    **kwargs
-        All additional arguments are stored in ``attrs``.
-            state : untyped
-                role unclear
-            priority : int (default  = 1)
-                controls the order in which datasets are viewed in webgl
+    alpha : ndarray, optional
+        Overrides the alpha channel the 2D colormap produces.
+    state : optional
+        Passed through to the webgl viewer; role unclear.
+    priority : int, optional
+        Priority for display ordering. Default is 1.
+    attrs : mapping, optional
+        Arbitrary metadata to carry on the view. The only route for a key
+        that is not a parameter: an unrecognized keyword is a ``TypeError``.
+        Keys the webgl viewer reads from it:
             stim : str
                 path to stimulus file
             rate : numeric (default 1)
@@ -354,8 +361,6 @@ class Volume2D(Dataview2D[Volume], VolumetricView):
                 delay for movie/time series playback in webgl
             filter : str (default  = "nearest")
                 interpolation filter for volumetric rendering in webgl (nearest/trilinear/nearlin/debug)
-            alpha : ndarray or Volume
-                forwarded as the alpha channel of the RGB view built by `raw`
     """
 
     def __init__(
@@ -370,7 +375,10 @@ class Volume2D(Dataview2D[Volume], VolumetricView):
         vmax: Optional[float] = None,
         vmin2: Optional[float] = None,
         vmax2: Optional[float] = None,
-        **kwargs: Any,
+        alpha: Optional[npt.NDArray] = None,
+        state: Any = None,
+        priority: int = 1,
+        attrs: Optional[Mapping[str, Any]] = None,
     ) -> None:
         chan1, chan2 = _resolve_2d_channels(
             dim1,
@@ -391,7 +399,10 @@ class Volume2D(Dataview2D[Volume], VolumetricView):
             vmax=vmax,
             vmin2=vmin2,
             vmax2=vmax2,
-            **kwargs,
+            alpha=alpha,
+            state=state,
+            priority=priority,
+            attrs=attrs,
         )
 
     def __repr__(self) -> str:
@@ -449,12 +460,16 @@ class Vertex2D(Dataview2D[Vertex], SurfaceView):
         Minimum value in colormap for dim2. Defaults to dim2's own vmin.
     vmax2 : float, optional
         Maximum value in colormap for dim2. Defaults to dim2's own vmax.
-    **kwargs
-        All additional arguments are stored in ``attrs``.
-            state : untyped
-                role unclear
-            priority : int (default  = 1)
-                controls the order in which datasets are viewed in webgl
+    alpha : ndarray, optional
+        Overrides the alpha channel the 2D colormap produces.
+    state : optional
+        Passed through to the webgl viewer; role unclear.
+    priority : int, optional
+        Priority for display ordering. Default is 1.
+    attrs : mapping, optional
+        Arbitrary metadata to carry on the view. The only route for a key
+        that is not a parameter: an unrecognized keyword is a ``TypeError``.
+        Keys the webgl viewer reads from it:
             stim : str
                 path to stimulus file
             rate : numeric (default 1)
@@ -463,8 +478,6 @@ class Vertex2D(Dataview2D[Vertex], SurfaceView):
                 delay for movie/time series playback in webgl
             filter : str (default  = "nearest")
                 interpolation filter for volumetric rendering in webgl (nearest/trilinear/nearlin/debug)
-            alpha : ndarray or Volume
-                forwarded as the alpha channel of the RGB view built by `raw`
     """
 
     def __init__(
@@ -478,7 +491,10 @@ class Vertex2D(Dataview2D[Vertex], SurfaceView):
         vmax: Optional[float] = None,
         vmin2: Optional[float] = None,
         vmax2: Optional[float] = None,
-        **kwargs: Any,
+        alpha: Optional[npt.NDArray] = None,
+        state: Any = None,
+        priority: int = 1,
+        attrs: Optional[Mapping[str, Any]] = None,
     ) -> None:
         chan1, chan2 = _resolve_2d_channels(
             dim1,
@@ -499,7 +515,10 @@ class Vertex2D(Dataview2D[Vertex], SurfaceView):
             vmax=vmax,
             vmin2=vmin2,
             vmax2=vmax2,
-            **kwargs,
+            alpha=alpha,
+            state=state,
+            priority=priority,
+            attrs=attrs,
         )
 
     def __repr__(self) -> str:
