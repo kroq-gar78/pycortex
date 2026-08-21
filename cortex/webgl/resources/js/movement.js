@@ -254,6 +254,14 @@ var jsplot = (function (module) {
 			event.preventDefault();
 			event.stopPropagation();
 
+			// preventDefault() above suppresses the click's default action,
+			// which includes moving keyboard focus here. In a full window that
+			// is harmless, but inside an iframe it leaves focus in the parent
+			// document, so the keypress shortcuts bound on this window (see
+			// jsplot.Menu) never fire -- clicking the brain and pressing 'f'
+			// did nothing. Claim focus explicitly.
+			window.focus();
+
 			if ( this._state === STATE.NONE ) {
 				this._state = keystate !== null ? keystate : event.button;
 				this._start = this._end = getMouse(event);
@@ -308,6 +316,14 @@ var jsplot = (function (module) {
 
 		function mousewheel( event ) {
 			if (!event.altKey) {
+				// Cancel the scroll we are consuming as a zoom. Without this the
+				// page scrolls as well, which is invisible in a full-window
+				// viewer but very visible when embedded in a scrollable page
+				// such as a Jupyter notebook. Only cancel when we actually
+				// handle the event: alt+wheel belongs to the depth control,
+				// which cancels the event itself.
+				event.preventDefault();
+
 				delta = event.deltaY
 
 				// normalize across browsers
