@@ -25,28 +25,6 @@ class TestJupyterImports(unittest.TestCase):
         self.assertTrue(hasattr(cortex.webgl, "jupyter"))
 
 
-class TestFindFreePort(unittest.TestCase):
-    """Test the _find_free_port helper."""
-
-    def test_returns_valid_port(self):
-        from cortex.webgl.jupyter import _find_free_port
-
-        port = _find_free_port()
-        self.assertIsInstance(port, int)
-        self.assertGreaterEqual(port, 1024)
-        self.assertLessEqual(port, 65535)
-
-    def test_all_ports_in_valid_range(self):
-        """Issue #24: replace flaky uniqueness test with range validation."""
-        from cortex.webgl.jupyter import _find_free_port
-
-        for _ in range(10):
-            port = _find_free_port()
-            self.assertIsInstance(port, int)
-            self.assertGreaterEqual(port, 1024)
-            self.assertLessEqual(port, 65535)
-
-
 class TestDisplay(unittest.TestCase):
     """Test the display() dispatch function."""
 
@@ -88,7 +66,7 @@ class TestDisplayIframe(unittest.TestCase):
     def test_calls_show_with_correct_params(self, mock_show, mock_display):
         from cortex.webgl.jupyter import display_iframe
 
-        mock_show.return_value = MagicMock()
+        mock_show.return_value = MagicMock(port=9999)
         result = display_iframe("fake_data", port=9999)
 
         mock_show.assert_called_once()
@@ -104,7 +82,7 @@ class TestDisplayIframe(unittest.TestCase):
         from cortex.webgl.jupyter import display_iframe
         from IPython.display import IFrame
 
-        mock_show.return_value = MagicMock()
+        mock_show.return_value = MagicMock(port=8888)
         display_iframe("fake_data", port=8888)
 
         mock_display.assert_called_once()
@@ -115,15 +93,26 @@ class TestDisplayIframe(unittest.TestCase):
 
     @patch("cortex.webgl.jupyter.ipydisplay")
     @patch("cortex.webgl.view.show")
-    def test_auto_port_is_valid(self, mock_show, mock_display):
+    def test_auto_port_forwarded_as_none(self, mock_show, mock_display):
+        """port=None is passed straight through so serve.WebApp binds port 0."""
         from cortex.webgl.jupyter import display_iframe
 
-        mock_show.return_value = MagicMock()
+        mock_show.return_value = MagicMock(port=45678)
         display_iframe("fake_data")
 
-        port = mock_show.call_args.kwargs["port"]
-        self.assertGreaterEqual(port, 1024)
-        self.assertLessEqual(port, 65535)
+        self.assertIsNone(mock_show.call_args.kwargs["port"])
+
+    @patch("cortex.webgl.jupyter.ipydisplay")
+    @patch("cortex.webgl.view.show")
+    def test_iframe_url_uses_os_assigned_port(self, mock_show, mock_display):
+        """With port=None the URL must use the port the server actually bound."""
+        from cortex.webgl.jupyter import display_iframe
+
+        mock_show.return_value = MagicMock(port=45678)
+        display_iframe("fake_data")
+
+        iframe_arg = mock_display.call_args[0][0]
+        self.assertIn("45678", iframe_arg.src)
 
 
 class TestDisplayStatic(unittest.TestCase):
@@ -314,7 +303,7 @@ class TestDisplayIframeUrl(unittest.TestCase):
         """Issue #1: iframe URL should use 127.0.0.1, not socket.gethostname()."""
         from cortex.webgl.jupyter import display_iframe
 
-        mock_show.return_value = MagicMock()
+        mock_show.return_value = MagicMock(port=7777)
         display_iframe("fake_data", port=7777)
 
         iframe_arg = mock_display.call_args[0][0]
@@ -330,7 +319,7 @@ class TestDisplayIframeUrl(unittest.TestCase):
         """Issue #1: iframe host should be configurable via env var."""
         from cortex.webgl.jupyter import display_iframe
 
-        mock_show.return_value = MagicMock()
+        mock_show.return_value = MagicMock(port=7777)
         with patch.dict(os.environ, {"CORTEX_JUPYTER_IFRAME_HOST": "myhost.local"}):
             display_iframe("fake_data", port=7777)
 
@@ -343,7 +332,7 @@ class TestDisplayIframeUrl(unittest.TestCase):
         """Issue #2: show() should be called with display_url=False."""
         from cortex.webgl.jupyter import display_iframe
 
-        mock_show.return_value = MagicMock()
+        mock_show.return_value = MagicMock(port=9999)
         display_iframe("fake_data", port=9999)
 
         call_kwargs = mock_show.call_args.kwargs
@@ -734,20 +723,6 @@ class TestQuietHandlerLogging(unittest.TestCase):
         )
 
         viewer.close()
-
-
-class TestFindFreePortFlaky(unittest.TestCase):
-    """Fix for issue #24: flaky port uniqueness test."""
-
-    def test_returns_valid_port_range(self):
-        """Ports should be in the valid ephemeral range."""
-        from cortex.webgl.jupyter import _find_free_port
-
-        for _ in range(10):
-            port = _find_free_port()
-            self.assertIsInstance(port, int)
-            self.assertGreaterEqual(port, 1024)
-            self.assertLessEqual(port, 65535)
 
 
 class TestViewerRemoveFromRegistryOnClose(unittest.TestCase):

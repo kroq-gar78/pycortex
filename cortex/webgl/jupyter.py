@@ -21,7 +21,6 @@ import http.server
 import logging
 import os
 import shutil
-import socket
 import tempfile
 import threading
 import weakref
@@ -62,20 +61,6 @@ def close_all():
 
 
 atexit.register(close_all)
-
-
-def _find_free_port():
-    """Find a free TCP port by binding to port 0 and reading the OS-assigned port.
-
-    Note: There is an inherent TOCTOU race between releasing this socket and
-    the caller binding the port. For ``display_static`` this is avoided by
-    binding ``HTTPServer`` to port 0 directly. For ``display_iframe`` the
-    underlying Tornado server does not support port 0, so this helper is used
-    as a best-effort fallback.
-    """
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("", 0))
-        return s.getsockname()[1]
 
 
 class StaticViewer:
@@ -216,8 +201,9 @@ def display_iframe(data, width="100%", height=600, port=None, **kwargs):
     height : int, optional
         IFrame height in pixels. Default 600.
     port : int or None, optional
-        Port for the Tornado server. If None, a free port is chosen
-        automatically.
+        Port for the Tornado server. If None, the OS assigns a guaranteed-free
+        ephemeral port (``serve.WebApp`` binds port 0 synchronously and reads
+        the real port back).
     **kwargs
         Additional keyword arguments passed to ``cortex.webgl.show()``.
 
@@ -229,9 +215,6 @@ def display_iframe(data, width="100%", height=600, port=None, **kwargs):
     """
     from . import view
 
-    if port is None:
-        port = _find_free_port()
-
     # Start the server without opening a browser
     kwargs["open_browser"] = False
     kwargs["autoclose"] = False
@@ -239,7 +222,9 @@ def display_iframe(data, width="100%", height=600, port=None, **kwargs):
     server = view.show(data, port=port, **kwargs)
 
     host = os.environ.get("CORTEX_JUPYTER_IFRAME_HOST", "127.0.0.1")
-    url = "http://%s:%d/mixer.html" % (host, port)
+    # Always read the bound port back off the server rather than reusing the
+    # `port` argument, which is None when the OS assigns the port.
+    url = "http://%s:%d/mixer.html" % (host, server.port)
 
     # Format width for IFrame
     if isinstance(width, int):
