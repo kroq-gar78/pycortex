@@ -4,6 +4,9 @@ These tests require ``playwright`` and Chromium to be installed::
 
     pip install playwright
     playwright install chromium
+
+Firefox-specific tests additionally require ``playwright install firefox``
+and are skipped otherwise.
 """
 import numpy as np
 import pytest
@@ -11,7 +14,7 @@ import pytest
 import cortex
 from cortex.export.headless import _PlaywrightThread
 
-from .testing_utils import has_playwright
+from .testing_utils import has_playwright, has_playwright_firefox
 
 pytestmark = pytest.mark.skipif(
     not has_playwright,
@@ -20,6 +23,20 @@ pytestmark = pytest.mark.skipif(
 
 
 subj, xfmname, volshape = "S1", "fullhead", (31, 100, 100)
+
+
+@pytest.mark.skipif(
+    not has_playwright_firefox, reason="playwright + Firefox not available"
+)
+def test_headless_viewer_opens_and_closes_firefox():
+    """The headless viewer should also work with browser='firefox'."""
+    vol = cortex.Volume(np.random.randn(*volshape), subj, xfmname)
+
+    with cortex.export.headless_viewer(
+        vol, viewer_params={}, browser="firefox"
+    ) as handle:
+        assert hasattr(handle, "server")
+        assert handle.server.port > 0
 
 
 def test_headless_viewer_opens_and_closes():

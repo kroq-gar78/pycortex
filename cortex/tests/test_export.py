@@ -13,7 +13,7 @@ import pytest
 
 import cortex
 
-from .testing_utils import has_playwright
+from .testing_utils import has_playwright, has_playwright_firefox
 
 pytestmark = pytest.mark.skipif(
     not has_playwright,
@@ -82,3 +82,49 @@ def test_plot_panels_headless():
         assert fig is not None
         assert os.path.isfile(save_name)
         assert os.path.getsize(save_name) > 0
+
+
+@pytest.mark.skipif(
+    not (has_playwright and has_playwright_firefox),
+    reason="playwright + both Chromium and Firefox are required",
+)
+def test_save_3d_views_headless_chromium_matches_firefox():
+    """The same scene rendered headlessly in Chromium and Firefox should
+    produce near-identical images, confirming Firefox's software WebGL
+    rendering is not silently producing a blank/broken view."""
+    from PIL import Image
+
+    vol = cortex.Volume(np.random.randn(*volshape), subj, xfmname)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        images = {}
+        for browser in ("chromium", "firefox"):
+            base = os.path.join(tmpdir, f"test_img_{browser}")
+            file_names = cortex.export.save_3d_views(
+                vol,
+                base_name=base,
+                list_angles=["lateral_pivot"],
+                list_surfaces=["inflated"],
+                size=(1024, 768),
+                trim=False,
+                sleep=10,
+                headless=True,
+                browser=browser,
+            )
+            assert len(file_names) == 1
+            assert os.path.isfile(file_names[0])
+            with Image.open(file_names[0]) as img:
+                images[browser] = np.asarray(img.convert("RGB"), dtype=np.float64)
+
+        assert images["chromium"].shape == images["firefox"].shape
+
+        # Software WebGL rasterizers can differ slightly in anti-aliasing
+        # and float precision, so compare with a tolerance rather than
+        # requiring byte-for-byte equality.
+        diff = np.abs(images["chromium"] - images["firefox"])
+        mean_abs_diff = diff.mean()
+        assert mean_abs_diff < 5.0, (
+            f"Chromium and Firefox renders differ too much (mean abs diff "
+            f"= {mean_abs_diff:.2f} out of 255); Firefox rendering may be "
+            "broken."
+        )
