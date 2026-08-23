@@ -278,14 +278,43 @@ var dataset = (function(module) {
         var frame = ((time + this.delay) * this.rate).mod(this.frames);
         var fframe = Math.floor(frame);
         this.uniforms.framemix.value = frame - fframe;
+
+        // For 2D vertex data the shader reads both dimensions from the .x/.y of
+        // two vec2 attributes (see surface_vertex in shaderlib.js), so the two
+        // dimensions are interleaved here instead of being dispatched as four
+        // separate float attributes.
+        var pack2d = this.vertex && this.data.length === 2 && !this.data[0].raw;
+
         for (var i = 0; i < this.data.length; i++) {
-            this.data[i].set(this.uniforms, i, fframe, this._dispatch);
+            this.data[i].set(this.uniforms, i, fframe, this._dispatch, pack2d);
         }
+
+        if (pack2d) {
+            var verts0 = this.data[0].verts, verts1 = this.data[1].verts;
+            var frames = [fframe, (fframe + 1).mod(verts0.length)];
+            frames.forEach(function(f, which) {
+                var packed = [0, 1].map(function(side) {
+                    var a = verts0[f][side].array;
+                    var b = verts1[f.mod(verts1.length)][side].array;
+                    var out = new Float32Array(a.length * 2);
+                    for (var i = 0; i < a.length; i++) {
+                        out[2 * i] = a[i];
+                        out[2 * i + 1] = b[i];
+                    }
+                    var attr = new THREE.BufferAttribute(out, 2);
+                    attr.needsUpdate = true;
+                    return attr;
+                });
+                this._dispatch({
+                    type: "attribute", name: "data" + which, value: packed,
+                });
+            }.bind(this));
+        }
+
         // Combine per-dim NaN masks into the single shared nanmask
-        // attribute. Vertex2D dispatches each dim's data separately
-        // (data0/1 vs data2/3) but shares one nanmask attribute in the
-        // shader; if either dim's value is NaN at a vertex, that vertex
-        // must be discarded.
+        // attribute. Each dimension of a Vertex2D view carries its own mask,
+        // but the shader has a single nanmask attribute; if either dim's value
+        // is NaN at a vertex, that vertex must be discarded.
         if (this.vertex && !this.data[0].raw && this.data[0].nanmasks.length > 0) {
             var dim0 = this.data[0].nanmasks[fframe];
             var combined;
@@ -497,8 +526,12 @@ var dataset = (function(module) {
     module.VertexData.prototype.setFilter = function(interp) {
         //nothing to do...
     }
-    module.VertexData.prototype.set = function(uniforms, dim, fframe, dispatch) {
-        var name = dim == 0 ? "data0":"data2";
+    module.VertexData.prototype.set = function(uniforms, dim, fframe, dispatch, pack2d) {
+        // When pack2d is set, DataView.setFrame interleaves both dimensions
+        // into two vec2 attributes itself, so dispatching the per-dimension
+        // float buffers here would upload data the shader never reads.
+        if (pack2d)
+            return;
         dispatch({type:"attribute", name:"data"+(2*dim), value:this.verts[fframe]});
         dispatch({type:"attribute", name:"data"+(2*dim+1), value:this.verts[(fframe+1).mod(this.verts.length)]});
         // The combined nanmask is dispatched by DataView.setFrame after

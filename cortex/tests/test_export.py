@@ -84,6 +84,96 @@ def test_plot_panels_headless():
         assert os.path.getsize(save_name) > 0
 
 
+def _vertex_dataviews():
+    """Build one dataview per vertex-backed type, on a fixed random seed."""
+    npts = cortex.db.get_surf(subj, "fiducial", merge=True)[0].shape[0]
+    rng = np.random.RandomState(0)
+    first = np.sin(np.linspace(0, 40, npts)) + 0.3 * rng.randn(npts)
+    second = np.cos(np.linspace(0, 17, npts))
+
+    return {
+        "Vertex": cortex.Vertex(first, subj, vmin=-2, vmax=2),
+        "Vertex2D": cortex.Vertex2D(
+            first, second, subj, vmin=-2, vmax=2, vmin2=-1, vmax2=1
+        ),
+        "VertexRGB": cortex.VertexRGB(
+            np.clip((first + 2) * 60, 0, 255),
+            np.clip((second + 1) * 120, 0, 255),
+            np.full(npts, 80.0),
+            subj,
+        ),
+    }
+
+
+def _render_headless(dv, tmpdir, name, browser):
+    from PIL import Image
+
+    file_names = cortex.export.save_3d_views(
+        dv,
+        base_name=os.path.join(tmpdir, f"{name}_{browser}"),
+        list_angles=["lateral_pivot"],
+        list_surfaces=["inflated"],
+        size=(600, 450),
+        trim=False,
+        sleep=10,
+        headless=True,
+        browser=browser,
+    )
+    assert len(file_names) == 1
+    assert os.path.isfile(file_names[0])
+    with Image.open(file_names[0]) as img:
+        return np.asarray(img.convert("RGB"), dtype=np.float64)
+
+
+@pytest.mark.parametrize("browser", ["chromium", "firefox"])
+@pytest.mark.parametrize("kind", ["Vertex", "Vertex2D", "VertexRGB"])
+def test_vertex_dataviews_render_non_blank(kind, browser):
+    """Vertex-backed dataviews must actually render.
+
+    The surface_vertex shader sits close to the WebGL minimum of 16 vertex
+    attributes.  When it declares more than that, the program silently fails to
+    link and the surface renders as a blank image with no Python-side error --
+    this regressed Vertex2D in *both* browsers and Vertex/VertexRGB under
+    Firefox's Mesa software rasterizer, which (unlike Chromium's ANGLE) counts
+    declared-but-unused attributes against the limit.
+    """
+    if browser == "firefox" and not has_playwright_firefox:
+        pytest.skip("playwright + Firefox not available")
+
+    dv = _vertex_dataviews()[kind]
+    with tempfile.TemporaryDirectory() as tmpdir:
+        image = _render_headless(dv, tmpdir, kind, browser)
+
+    # A failed shader link yields a uniformly blank canvas.
+    assert image.std() > 1.0, (
+        f"{kind} rendered a blank image in {browser} (std={image.std():.4f}); "
+        "the surface shader most likely failed to link."
+    )
+
+
+@pytest.mark.skipif(
+    not (has_playwright and has_playwright_firefox),
+    reason="playwright + both Chromium and Firefox are required",
+)
+@pytest.mark.parametrize("kind", ["Vertex", "Vertex2D", "VertexRGB"])
+def test_vertex_dataviews_chromium_matches_firefox(kind):
+    """Each vertex dataview type should look the same in both browsers."""
+    dv = _vertex_dataviews()[kind]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        images = {
+            browser: _render_headless(dv, tmpdir, kind, browser)
+            for browser in ("chromium", "firefox")
+        }
+
+    assert images["chromium"].shape == images["firefox"].shape
+    mean_abs_diff = np.abs(images["chromium"] - images["firefox"]).mean()
+    assert mean_abs_diff < 5.0, (
+        f"{kind} differs between Chromium and Firefox (mean abs diff "
+        f"= {mean_abs_diff:.2f} out of 255)."
+    )
+
+
 @pytest.mark.skipif(
     not (has_playwright and has_playwright_firefox),
     reason="playwright + both Chromium and Firefox are required",
