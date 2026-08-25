@@ -10,7 +10,6 @@ options the viewer generates shaders with is linked here.
 These tests only need Chromium; no subject database or viewer is involved.
 """
 
-import json
 import os
 
 import pytest
@@ -24,88 +23,80 @@ pytestmark = pytest.mark.skipif(
 
 JS_PATH = os.path.join(os.path.dirname(cortex.webgl.__file__), "resources", "js")
 
-# The declarations THREE.WebGLProgram prepends to every shader it builds
-# (three.js r69, resources/js/three.js). Only the ones the surface shaders
-# actually rely on are listed; a missing one shows up as a compile error rather
-# than as a silently passing test.
-VERTEX_PREFIX = """
-precision highp float;
-precision highp int;
-#define MAX_DIR_LIGHTS 3
-#define MAX_POINT_LIGHTS 0
-#define MAX_SPOT_LIGHTS 0
-#define MAX_HEMI_LIGHTS 0
-#define MAX_SHADOWS 0
-uniform mat4 modelMatrix;
-uniform mat4 modelViewMatrix;
-uniform mat4 projectionMatrix;
-uniform mat4 viewMatrix;
-uniform mat3 normalMatrix;
-uniform vec3 cameraPosition;
-attribute vec3 position;
-attribute vec3 normal;
-attribute vec2 uv;
-attribute vec2 uv2;
-"""
-
-FRAGMENT_PREFIX = """
-precision highp float;
-precision highp int;
-#define MAX_DIR_LIGHTS 3
-#define MAX_POINT_LIGHTS 0
-#define MAX_SPOT_LIGHTS 0
-#define MAX_HEMI_LIGHTS 0
-#define MAX_SHADOWS 0
-uniform mat4 viewMatrix;
-uniform vec3 cameraPosition;
-"""
-
 # Loads the viewer's shader library into a page and exposes a hook that builds
-# one shader variant and links it, the way THREE.WebGLProgram does.
+# one shader variant through THREE.ShaderMaterial -- the same constructor
+# DataView.getShader() uses in dataset.js -- and renders it once. That way
+# THREE.WebGLProgram builds the real prefix (precision, light/morph defines,
+# attribute declarations) itself instead of a copy hand-kept here going stale.
 PAGE = """
 <html><body><canvas id="c" width="32" height="32"></canvas>
 <script src="file://__JSDIR__/three.js"></script>
 <script src="file://__JSDIR__/shaderlib.js"></script>
 <script>
-var gl = document.getElementById('c').getContext('webgl');
+var renderer = new THREE.WebGLRenderer({
+    canvas: document.getElementById('c'), antialias: false
+});
 // THREE.WebGLRenderer asks for these too; the fragment shaders use fwidth
 // (derivatives) and float textures.
-gl.getExtension('OES_standard_derivatives');
-gl.getExtension('OES_texture_float');
-var VERTEX_PREFIX = __VERTEX_PREFIX__;
-var FRAGMENT_PREFIX = __FRAGMENT_PREFIX__;
+renderer.context.getExtension('OES_standard_derivatives');
+renderer.context.getExtension('OES_texture_float');
+var scene = new THREE.Scene();
+var camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
 
-function compile(type, source) {
-    var shader = gl.createShader(type);
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    return shader;
-}
+var ITEM_SIZE = {f: 1, v2: 2, v3: 3, v4: 4};
 
 window.linkShader = function(shadername, opts) {
     var code = Shaders[shadername](opts);
     // The pick shader returns one fragment shader per axis; any of them will
     // do, they all go with the vertex shader that holds the attributes.
     var frag = code.fragment instanceof Array ? code.fragment[0] : code.fragment;
-    var vs = compile(gl.VERTEX_SHADER, VERTEX_PREFIX + code.vertex);
-    var fs = compile(gl.FRAGMENT_SHADER, FRAGMENT_PREFIX + frag);
-    var program = gl.createProgram();
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
 
+    // A handful of dummy vertices are enough to let every attribute the
+    // shader declares (position/normal/uv/uv2 plus whatever custom ones
+    // code.attrs lists) bind to a buffer, which is all link status needs.
+    var nverts = 3;
+    var geometry = new THREE.BufferGeometry();
+    geometry.addAttribute('position', new THREE.BufferAttribute(new Float32Array(nverts * 3), 3));
+    geometry.addAttribute('normal', new THREE.BufferAttribute(new Float32Array(nverts * 3), 3));
+    geometry.addAttribute('uv', new THREE.BufferAttribute(new Float32Array(nverts * 2), 2));
+    geometry.addAttribute('uv2', new THREE.BufferAttribute(new Float32Array(nverts * 2), 2));
+    for (var name in code.attrs) {
+        var itemSize = ITEM_SIZE[code.attrs[name].type] || 1;
+        geometry.addAttribute(name, new THREE.BufferAttribute(new Float32Array(nverts * itemSize), itemSize));
+    }
+
+    // The real viewer passes lights:true (dataset.js's getShader), but that
+    // only makes THREE.WebGLRenderer refresh built-in light uniforms against
+    // the material's uniforms object -- which needs the viewer's full merged
+    // uniform set to exist. None of these shaders reference THREE's light
+    // uniforms (they compute shading themselves), and the MAX_*_LIGHTS
+    // defines this test cares about come from the renderer's light count
+    // regardless of this flag, so leaving it out avoids that crash for free.
+    var material = new THREE.ShaderMaterial({
+        vertexShader: code.vertex,
+        fragmentShader: frag,
+        attributes: code.attrs,
+    });
+    var mesh = new THREE.Mesh(geometry, material);
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+    renderer.render(scene, camera);
+    scene.remove(mesh);
+
+    var gl = renderer.context;
+    var program = material.program;
+    var vs = program.vertexShader, fs = program.fragmentShader, gp = program.program;
     var result = {
         compiled: !!(gl.getShaderParameter(vs, gl.COMPILE_STATUS) &&
                      gl.getShaderParameter(fs, gl.COMPILE_STATUS)),
-        linked: !!gl.getProgramParameter(program, gl.LINK_STATUS),
+        linked: !!gl.getProgramParameter(gp, gl.LINK_STATUS),
         log: [gl.getShaderInfoLog(vs), gl.getShaderInfoLog(fs),
-              gl.getProgramInfoLog(program)].join("\\n"),
+              gl.getProgramInfoLog(gp)].join("\\n"),
         max_attributes: gl.getParameter(gl.MAX_VERTEX_ATTRIBS),
-        attributes: [],
+        attributes: program.attributesKeys.filter(function(k) {
+            return program.attributes[k] !== null && program.attributes[k] !== -1;
+        }),
     };
-    var nattr = gl.getProgramParameter(program, gl.ACTIVE_ATTRIBUTES) || 0;
-    for (var i = 0; i < nattr; i++)
-        result.attributes.push(gl.getActiveAttrib(program, i).name);
     return result;
 };
 </script></body></html>
@@ -154,11 +145,7 @@ def link_shader(tmp_path_factory):
     from playwright.sync_api import sync_playwright
 
     page_path = tmp_path_factory.mktemp("shaders") / "shaders.html"
-    page_path.write_text(
-        PAGE.replace("__JSDIR__", JS_PATH)
-        .replace("__VERTEX_PREFIX__", json.dumps(VERTEX_PREFIX))
-        .replace("__FRAGMENT_PREFIX__", json.dumps(FRAGMENT_PREFIX))
-    )
+    page_path.write_text(PAGE.replace("__JSDIR__", JS_PATH))
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
