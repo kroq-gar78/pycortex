@@ -1,5 +1,6 @@
 """Contain utility functions
 """
+from __future__ import annotations # maybe needed for 3.9
 import binascii
 import copy
 from importlib import import_module
@@ -12,7 +13,9 @@ import tempfile
 import urllib.request
 import warnings
 
-from typing import Any, Callable, Generic, Optional, TypeVar, TYPE_CHECKING, Union, cast, overload, Literal
+from typing import Any, Callable, Generic, Optional, TypeVar, TYPE_CHECKING, Union, cast, overload, Literal, Sequence
+import sys
+
 if sys.version_info < (3, 10):
     from typing_extensions import ParamSpec
 else:
@@ -21,6 +24,7 @@ else:
 import h5py
 from looseversion import LooseVersion
 import numpy as np
+import numpy.typing as npt
 
 from . import formats
 from .database import db
@@ -42,7 +46,7 @@ P = ParamSpec('P')
 T = TypeVar('T')
 
 class DocLoader(Generic[P, T]):
-    def __init__(self, func, mod, package, actual_func: Optional[Callable[P, T]] = None):
+    def __init__(self, func: str, mod: str, package: str, actual_func: Optional[Callable[P, T]] = None) -> None:
         self._load: Callable[[], Callable[P, T]] = lambda: getattr(import_module(mod, package), func)
         self._actual_func = actual_func # stored only to resolve generic types during type checking
 
@@ -71,9 +75,9 @@ def get_roipack(*args, **kwargs):
     warnings.warn('Please use db.get_overlay instead', DeprecationWarning)
     return db.get_overlay(*args, **kwargs)
 
-def get_ctmpack(subject, types=("inflated",), method="raw", level=0, recache=False,
-                decimate=False, external_svg=None,
-                overlays_available=None):
+def get_ctmpack(subject: str, types: Sequence[str]=("inflated",), method: Literal['mg2', 'raw']="raw", level: int=0, recache: bool=False,
+                decimate: bool=False, external_svg: Optional[str]=None,
+                overlays_available: Optional[Sequence[str]]=None) -> str:
     """Creates ctm file for the specified input arguments.
 
     This is a cached file that specifies (1) the surfaces between which
@@ -84,7 +88,7 @@ def get_ctmpack(subject, types=("inflated",), method="raw", level=0, recache=Fal
     ----------
     subject : str
         Name of subject in pycortex stored
-    types : tuple
+    types : tuple[str, ...]
         Surfaces between which to interpolate.
     method : str
         string specifying method of how inverse transforms for
@@ -100,7 +104,7 @@ def get_ctmpack(subject, types=("inflated",), method="raw", level=0, recache=Fal
         file string for .svg file containing alternative overlays
         for brain viewer. If None, the `overlays.svg` file for this
         subject (in the pycortex_store folder for the subejct) is used.
-    overlays_available: tuple or None
+    overlays_available: tuple[str, ...] or None
         Which overlays in the svg file to include in the viewer. If
         None, all layers in the relevant svg file are included.
 
@@ -135,7 +139,7 @@ def get_ctmpack(subject, types=("inflated",), method="raw", level=0, recache=Fal
     return ctmfile
 
 
-def get_ctmmap(subject, **kwargs):
+def get_ctmmap(subject: str, **kwargs):
     """Return a mapping from the vertices in the CTM surface to the vertices
     in the freesurfer surface. 
     The mapping is a numpy array, such that `ctm2fs_left[i] = j` means that the
@@ -201,12 +205,12 @@ def get_ctmmap(subject, **kwargs):
     ctm_left, ctm_right = brainctm.read_pack(ctmfile)
     # Find the closest vertex in the freesurfer surface for each vertex in the CTM
     # surface. The result is a mapping from CTM vertices to freesurfer vertices.
-    ctm2fs_left = lmap.query(ctm_left[0])[1]
-    ctm2fs_right = rmap.query(ctm_right[0])[1]
+    ctm2fs_left = cast(np.intp, lmap.query(ctm_left[0])[1])
+    ctm2fs_right = cast(np.intp, rmap.query(ctm_right[0])[1])
     return ctm2fs_left, ctm2fs_right
 
 
-def get_ctm2webgl_map(subject, **kwargs):
+def get_ctm2webgl_map(subject: str, **kwargs):
     """Return a mapping from the vertices in the CTM surface to the vertices visualized
     on the WebGL viewer.
     The mapping is a numpy array such that `ctm2webgl_left[i] = j` means that the i-th
@@ -278,7 +282,7 @@ def get_ctm2webgl_map(subject, **kwargs):
     return ctm2webgl_left, ctm2webgl_right
 
 
-def get_fs2webgl_map(subject, **kwargs):
+def get_fs2webgl_map(subject: str, **kwargs):
     """Return a mapping from the vertices in the freesurfer surface to the vertices
     visualized on the WebGL viewer.
 
@@ -315,7 +319,7 @@ def get_fs2webgl_map(subject, **kwargs):
     return fs2webgl_left, fs2webgl_right
 
 
-def get_cortical_mask(subject, xfmname, type='nearest'):
+def get_cortical_mask(subject: str, xfmname: str, type: str='nearest') -> npt.NDArray[np.bool_]:
     """Gets the cortical mask for a particular transform
 
     Parameters
@@ -365,7 +369,7 @@ def get_cortical_mask(subject, xfmname, type='nearest'):
         return get_mapper(subject, xfmname, type=type).mask
 
 
-def get_vox_dist(subject, xfmname, surface="fiducial", max_dist=np.inf):
+def get_vox_dist(subject: str, xfmname: str, surface: str="fiducial", max_dist: float=np.inf) -> tuple[npt.NDArray[np.floating], npt.NDArray[np.intp]]:
     """Get the distance (in mm) from each functional voxel to the closest
     point on the surface.
 
@@ -516,7 +520,7 @@ def add_roi(data, name="new_roi", open_inkscape=True, add_path=True,
         return sp.call(cmd)
 
 
-def _get_neighbors_dict(polys):
+def _get_neighbors_dict(polys: npt.NDArray[np.integer]) -> dict[np.uint32, set[np.uint32]]:
     """Return a dictionary of {vertex : set(neighbor vertices)} for the given polys"""
     neighbors_dict = {}
     for poly in polys:
@@ -526,7 +530,7 @@ def _get_neighbors_dict(polys):
     return neighbors_dict
 
 
-def get_roi_verts(subject, roi=None, mask=False, overlay_file=None):
+def get_roi_verts(subject: str, roi: Optional[Union[str, list[str]]]=None, mask: bool=False, overlay_file: None=None) -> dict[str, npt.NDArray]:
     """Return vertices for the given ROIs, or all ROIs if none are given.
 
     Parameters
@@ -736,9 +740,9 @@ def get_aseg_mask(subject, aseg_name, xfmname=None, order=1, threshold=None, **k
     return mask
 
 
-def get_roi_masks(subject, xfmname, roi_list=None, gm_sampler='cortical', split_lr=False,
-                  allow_overlap=False, fail_for_missing_rois=True, exclude_empty_rois=False,
-                  threshold=None, return_dict=True, overlay_file=None):
+def get_roi_masks(subject: str, xfmname: str, roi_list: Optional[list[str]]=None, gm_sampler: str='cortical', split_lr: bool=False,
+                  allow_overlap: bool=False, fail_for_missing_rois: bool=True, exclude_empty_rois: bool=False,
+                  threshold: Optional[float]=None, return_dict: bool=True, overlay_file: Optional[str]=None) -> tuple[npt.NDArray[np.integer], dict[str, int]]:
     """Return a dictionary of roi masks
 
     This function returns a single 3D array with a separate numerical index for each ROI,
@@ -947,7 +951,7 @@ def get_roi_masks(subject, xfmname, roi_list=None, gm_sampler='cortical', split_
         return output
     else:
         idx_vol = np.zeros(vox_idx.shape, dtype=np.int64)
-        idx_labels = {}
+        idx_labels: dict[str, int] = {}
         for iroi, roi in enumerate(roi_list, 1):
             idx_vol[roi_voxels[roi]] = iroi
             idx_labels[roi] = iroi
@@ -1050,7 +1054,7 @@ def vertex_to_voxel(subject):  # Am I deprecated in favor of mappers??? Maybe?
     return all_verts
 
 
-def _set_edge_distance_graph_attribute(graph, pts, polys):
+def _set_edge_distance_graph_attribute(graph, pts: npt.NDArray[np.floating], polys: npt.NDArray[np.integer]):
     '''
     adds the attribute 'edge distance' to a graph
     '''
@@ -1059,8 +1063,12 @@ def _set_edge_distance_graph_attribute(graph, pts, polys):
     l2_distance = lambda v1, v2: np.linalg.norm(pts[v1] - pts[v2])
     heuristic = l2_distance # A* heuristic
 
+    graph = cast(nx.Graph, graph) # cast needed b/c lazy import
     if not nx.get_edge_attributes(graph, 'distance'): # Add edge distances as an attribute to this graph if it isn't there
-        edge_distances = dict()
+        edge_distances: dict[tuple[int, int], np.floating] = dict()
+        x: int
+        y: int
+        z: int
         for x,y,z in polys:
             edge_distances[(x,y)] = heuristic(x,y)
             edge_distances[(y,x)] = heuristic(y,x)
@@ -1071,7 +1079,19 @@ def _set_edge_distance_graph_attribute(graph, pts, polys):
         nx.set_edge_attributes(graph, edge_distances, name='distance')
 
 
-def get_shared_voxels(subject, xfmname, hemi="both", merge=True, use_astar=True):
+@overload
+def get_shared_voxels(subject: str, xfmname: str, *, hemi: Literal['lh', 'rh', 'both']="both", merge: Literal[True]=True, use_astar: bool=True) -> npt.NDArray[np.integer]:
+    ...
+
+@overload
+def get_shared_voxels(subject: str, xfmname: str, *, hemi: Literal['lh', 'rh', 'both']="both", merge: Literal[False], use_astar: bool=True) -> tuple[npt.NDArray[np.integer], npt.NDArray[np.integer]]:
+    ...
+
+@overload
+def get_shared_voxels(subject: str, xfmname: str, *, hemi: Literal['lh', 'rh', 'both']="both", merge: bool, use_astar: bool=True) -> Union[npt.NDArray[np.integer], tuple[npt.NDArray[np.integer], npt.NDArray[np.integer]]]:
+    ...
+
+def get_shared_voxels(subject: str, xfmname: str, *, hemi: Literal['lh', 'rh', 'both']="both", merge: bool=True, use_astar: bool=True) -> Union[npt.NDArray[np.integer], tuple[npt.NDArray[np.integer], npt.NDArray[np.integer]]]:
     '''Return voxels that are shared by multiple vertices, and for each such voxel,
        also returns the mutually farthest pair of vertices mapping to the voxel
     Parameters
@@ -1099,7 +1119,7 @@ def get_shared_voxels(subject, xfmname, hemi="both", merge=True, use_astar=True)
     from scipy.sparse import find as sparse_find
     Lmask, Rmask = get_mapper(subject, xfmname).masks  # Get masks for left and right hemisphere
     if hemi == 'both':
-        hemispheres = ['lh', 'rh']
+        hemispheres: list[Literal['lh', 'rh']] = ['lh', 'rh']
     else:
         hemispheres = [hemi]
     out = []
@@ -1156,7 +1176,7 @@ def get_shared_voxels(subject, xfmname, hemi="both", merge=True, use_astar=True)
             return tuple(out)
 
 
-def load_sparse_array(fname, varname):
+def load_sparse_array(fname: str, varname: str):
     """Load a numpy sparse array from an hdf file
 
     Parameters
@@ -1178,7 +1198,7 @@ def load_sparse_array(fname, varname):
     return sparsemat
 
 
-def save_sparse_array(fname, data, varname, mode='a'):
+def save_sparse_array(fname: str, data, varname: str, mode: str='a'):
     """Save a numpy sparse array to an hdf file
 
     Results in relatively smaller file size than numpy.savez
@@ -1195,7 +1215,7 @@ def save_sparse_array(fname, data, varname, mode='a'):
         write / append mode set, one of ['w','a'] (passed to h5py.File())
     """
     import scipy.sparse
-    if not isinstance(data, scipy.sparse.csr.csr_matrix):
+    if not isinstance(data, scipy.sparse.csr_matrix):
         data_ = scipy.sparse.csr_matrix(data)
     else:
         data_ = data
@@ -1210,7 +1230,7 @@ def save_sparse_array(fname, data, varname, mode='a'):
         hf.create_dataset(varname + '_shape', data=data_.shape, compression='gzip')
 
 
-def get_cmap(name):
+def get_cmap(name: str):
     """Gets a colormaps
 
     Parameters
@@ -1275,8 +1295,8 @@ def add_cmap(cmap, name, cmapdir=None):
     plt.imsave(os.path.join(cmapdir, name), cmap_im, format="png")
 
 
-def download_subject(subject_id='fsaverage', url=None, pycortex_store=None,
-                     download_again=False):
+def download_subject(subject_id: str='fsaverage', url: Optional[str]=None, pycortex_store: Optional[str]=None,
+                     download_again: bool=False) -> None:
     """Download subjects to pycortex store
 
     Parameters
@@ -1337,7 +1357,7 @@ def download_subject(subject_id='fsaverage', url=None, pycortex_store=None,
     db.reload_subjects()
 
 
-def rotate_flatmap(surf_id, theta, plot=False):
+def rotate_flatmap(surf_id: str, theta: float, plot: bool=False):
     """Rotate flatmap to be less V-shaped
     
     Parameters
