@@ -13,28 +13,31 @@ uv
   Actually stores the raw flatmap coordinates, unnormalized. Normalization is handled
   in javascript, in the load function
 '''
+from collections.abc import Container
 import os
 import sys
 import json
 import tempfile
 import numpy as np
+import numpy.typing as npt
 from scipy.spatial import cKDTree
 
 from .database import db
 from .utils import get_cortical_mask, get_mapper, get_dropout
 from . import polyutils
 from .openctm import CTMfile
+from typing import Any, Literal, Optional, cast, Sequence
 
 class BrainCTM:
-    def __init__(self, subject, decimate=False):
+    def __init__(self, subject: str, decimate: bool=False) -> None:
         self.subject = subject
-        self.types = []
+        self.types: list[str] = []
 
         left, right = db.get_surf(subject, "fiducial")
         try:
             fleft, fright = db.get_surf(subject, "flat", nudge=True, merge=False)
         except IOError:
-            fleft = None
+            fleft, fright = None, None
 
         if decimate:
             try:
@@ -57,6 +60,7 @@ class BrainCTM:
                 self.right = Hemi(right[0], right[1])
 
             if fleft is not None:
+                assert fright is not None
                 #set medial wall
                 for hemi, ptpoly in ([self.left, fleft], [self.right, fright]):
                     # fidpolys = set(tuple(f) for f in polyutils.sort_polys(hemi.polys))
@@ -87,6 +91,7 @@ class BrainCTM:
 
         #Find the flatmap limits
         if fleft is not None:
+            assert fright is not None
             flatmerge = np.vstack([fleft[0][:,:2], fright[0][:,:2]])
             fmin, fmax = flatmerge.min(0), flatmerge.max(0)
             self.flatlims = [float(x) for x in -fmin], [float(x) for x in fmax-fmin]
@@ -96,24 +101,25 @@ class BrainCTM:
         else:
             self.flatlims = None
 
-    def addSurf(self, typename, addtype=True, **kwargs):
+    def addSurf(self, typename: str, addtype: bool=True, **kwargs) -> None:
         left, right = db.get_surf(self.subject, typename, nudge=False, merge=False)
         self.left.addSurf(left[0], typename, **kwargs)
         self.right.addSurf(right[0], typename, **kwargs)
         if addtype:
             self.types.append(typename)
 
-    def addCurvature(self, **kwargs):
+    def addCurvature(self, **kwargs) -> None:
         npz = db.get_surfinfo(self.subject, type='curvature', **kwargs)
         try:
+            # TODO: test for DecimatedHemi instead of try/except
             self.left.aux[:,1] = npz.left[self.left.mask]
             self.right.aux[:,1] = npz.right[self.right.mask]
         except AttributeError:
             self.left.aux[:,1] = npz.left
             self.right.aux[:,1] = npz.right
 
-    def save(self, path, method='mg2', external_svg=None, 
-             overlays_available=None, **kwargs):
+    def save(self, path: str, method: Literal['mg2', 'raw']='mg2', external_svg: Optional[str]=None, 
+             overlays_available: Optional[Container[str]]=None, **kwargs) -> list[npt.NDArray[np.integer]]:
         """Save CTM file for static html display. 
 
         Parameters
@@ -124,7 +130,7 @@ class BrainCTM:
             string specifying method of how inverse transforms for
             labels are computed (determines how labels are displayed
             on 3D viewer) one of ['mg2','raw']
-        overlays_available : str
+        overlays_available : list[str], optional
             Which overlays in the svg file to include in the viewer. If
             None, all layers in the relevant svg file are included.
 
@@ -145,7 +151,7 @@ class BrainCTM:
             fp.write(rbin)
 
         # Save the JSON descriptor | Need to add to this for extra_disp?
-        jsdict = dict(rois=os.path.split(svgname)[1],
+        jsdict: dict[str, Any] = dict(rois=os.path.split(svgname)[1],
                       data=os.path.split(ctmname)[1],
                       names=self.types, 
                       materials=[],
@@ -157,13 +163,17 @@ class BrainCTM:
 
         # Compute and save the index map
         if method != 'raw':
-            ptmap, inverse = [], []
+            ptmap: list[npt.NDArray[np.integer]] = []
+            inverse: list[npt.NDArray[np.integer]] = []
             for hemi, pts in zip([self.left, self.right], [lpts, rpts]):
+                diff: npt.NDArray[np.floating]
+                idx: npt.NDArray[np.integer] # TODO: is this an array or a scalar?
                 kdt = cKDTree(hemi.pts)
                 diff, idx = kdt.query(pts)
                 ptmap.append(idx)
                 inverse.append(idx.argsort())
         else:
+            # TODO: use indexable type for ptmap and inverse
             ptmap = inverse = np.arange(len(self.left.ctm)), np.arange(len(self.right.ctm))
 
         np.savez(mapname, 
@@ -172,6 +182,7 @@ class BrainCTM:
 
         # Save the SVG with remapped indices (map 2D flatmap locations to vertices)
         if self.left.flat is not None:
+            assert self.right.flat is not None
             flatpts = np.vstack([self.left.flat, self.right.flat])
             if external_svg is None:
                 svg = db.get_overlay(self.subject, pts=flatpts, 
@@ -197,7 +208,7 @@ class BrainCTM:
         return ptmap
 
 class Hemi:
-    def __init__(self, pts, polys, norms=None):
+    def __init__(self, pts: npt.NDArray[np.floating], polys: npt.NDArray[np.integer], norms: Optional[npt.NDArray[np.floating]]=None):
         # On Windows a NamedTemporaryFile cannot be opened a second time while
         # the Python handle is open, so close it and let the CTM library open it
         self.tf = tempfile.NamedTemporaryFile(delete = False)
@@ -215,7 +226,7 @@ class Hemi:
         self.surfs = {}
         self.aux = np.zeros((len(self.ctm), 4))
 
-    def addSurf(self, pts, name, renorm=True):
+    def addSurf(self, pts: npt.NDArray[np.floating], name: str, renorm: bool=True) -> None:
         '''Scales the in-between surfaces to be same scale as fiducial'''
         if renorm:
             norm = (pts - pts.min(0)) / (pts.max(0) - pts.min(0))
@@ -228,11 +239,11 @@ class Hemi:
         self.ctm.addAttrib(attrib, name)
         print(name)
 
-    def setFlat(self, pts):
+    def setFlat(self, pts: npt.NDArray[np.floating]) -> None:
         self.ctm.addUV(pts[:,:2].astype(float), 'uv')
         self.flat = pts[:,:2]
 
-    def save(self, **kwargs):
+    def save(self, **kwargs) -> tuple[tuple[npt.NDArray[np.floating], npt.NDArray[np.integer], None], bytes]:
         self.ctm.addAttrib(self.aux, 'auxdat')
         self.ctm.save(**kwargs)
         ctm = CTMfile(self.tfName)
@@ -270,15 +281,15 @@ class DecimatedHemi(Hemi):
         self.mask = mask
         self.idxmap = idxmap
 
-    def setFlat(self, pts):
+    def setFlat(self, pts: npt.NDArray[np.floating]) -> None:
         super().setFlat(pts[self.mask])
 
-    def addSurf(self, pts, **kwargs):
-        super().addSurf(pts[self.mask], **kwargs)
+    def addSurf(self, pts: npt.NDArray[np.floating], *args, **kwargs) -> None:
+        super().addSurf(pts[self.mask], *args, **kwargs)
 
-def make_pack(outfile, subj, types=("inflated",), method='raw', level=0,
-              decimate=False, disp_layers=['rois'], 
-              external_svg=None, overlays_available=None,):
+def make_pack(outfile: str, subj: str, types: Sequence[str]=("inflated",), method: Literal['mg2', 'raw']='raw', level: int=0,
+              decimate: bool=False, disp_layers: Sequence[str]=['rois'],
+              external_svg: Optional[str]=None, overlays_available: Optional[Sequence[str]]=None,) -> list[npt.NDArray[np.integer]]:
     """Generates a cached CTM file
 
     Parameters
@@ -299,13 +310,13 @@ def make_pack(outfile, subj, types=("inflated",), method='raw', level=0,
                     external_svg=external_svg,
                     overlays_available=overlays_available)
 
-def read_pack(ctmfile):
+def read_pack(ctmfile: str):
     fname = os.path.splitext(ctmfile)[0]
     with open(fname + ".json") as fp:
         jsfile = json.load(fp)
     offset = jsfile['offsets']
 
-    meshes = []
+    meshes: list[tuple[npt.NDArray[np.floating], npt.NDArray[np.integer]]] = []
 
     with open(ctmfile, 'rb') as ctmfp:
         ctmfp.seek(0, 2)

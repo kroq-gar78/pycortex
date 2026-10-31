@@ -9,7 +9,7 @@ import shutil
 import sys
 import threading
 import time
-from typing import Union, Any, Callable, Optional, ParamSpec, cast
+from typing import Sequence, TypeVar, TypedDict, Union, Any, Callable, Optional, ParamSpec, Literal, cast
 import warnings
 import webbrowser
 from configparser import NoOptionError
@@ -18,6 +18,7 @@ from configparser import NoOptionError
 from queue import Queue
 
 import numpy as np
+import numpy.typing as npt
 from tornado import web
 
 from .. import dataset, options, utils, volume
@@ -61,27 +62,69 @@ def _viewer_urls(port: int) -> tuple[str, str]:
     return local, network
 
 
+
+ViewParams = TypedDict(
+    "ViewParams",
+    {
+        "camera.azimuth": float,
+        "camera.altitude": float,
+        "camera.radius": float,
+        "camera.target": list[float],
+        "surface.{subject}.unfold": float,
+        "surface.{subject}.pivot": float,
+        "surface.{subject}.shift": float,
+        "surface.{subject}.depth": float,
+        "surface.{subject}.bumpy_flatmap": bool,
+        "surface.{subject}.allow_tilt": bool,
+        "surface.{subject}.equivolume": bool,
+        "surface.{subject}.colorbar": bool,
+        "surface.{subject}.opacity": float,
+        "surface.{subject}.left": bool,
+        "surface.{subject}.right": bool,
+        "surface.{subject}.specularity": float,
+        "surface.{subject}.layers": int,
+        "surface.{subject}.dither": bool,
+        "surface.{subject}.sampler": str,
+        "surface.{subject}.uniform_illumination": bool,
+        "surface.{subject}.curvature.brightness": float,
+        "surface.{subject}.curvature.contrast": float,
+        "surface.{subject}.curvature.smoothness": float,
+    },
+    total=False,
+)
+
+class AnimationKeyframe(ViewParams):
+    time: float
+
+"""
+class AnimationDict(TypedDict):
+    idx: int
+    state: str
+    value: float
+"""
+
+
 def make_static(
-    outpath,
-    data,
-    recache=False,
-    template="static.html",
-    anonymize=False,
-    overlays_available=None,
-    overlays_visible=("rois", "sulci"),
-    labels_visible=("rois",),
-    types=("inflated",),
-    html_embed=True,
-    copy_ctmfiles=True,
-    title="Brain",
-    layout=None,
-    overlay_file=None,
-    curvature_brightness=None,
-    curvature_contrast=None,
-    curvature_smoothness=None,
-    surface_specularity=None,
+    outpath: str,
+    data: Union[dataset.DatasetLike, dataset.Dataview],
+    recache: bool=False,
+    template: str="static.html",
+    anonymize: bool=False,
+    overlays_available: Optional[tuple[str, ...]]=None,
+    overlays_visible: tuple[str, ...]=("rois", "sulci"),
+    labels_visible: tuple[str, ...]=("rois",),
+    types: tuple[str, ...]=("inflated",),
+    html_embed: bool=True,
+    copy_ctmfiles: bool=True,
+    title: str="Brain",
+    layout: Optional[list[tuple[int, int]]]=None,
+    overlay_file: Optional[str]=None,
+    curvature_brightness: Optional[float]=None,
+    curvature_contrast: Optional[float]=None,
+    curvature_smoothness: Optional[float]=None,
+    surface_specularity: Optional[float]=None,
     **kwargs,
-):
+) -> None:
     """
     Creates a static webGL MRI viewer in your filesystem so that it can easily
     be posted publicly for sharing or just saved for later viewing.
@@ -186,7 +229,7 @@ def make_static(
     db.auxfile = None
 
     ## Rename files to anonymize
-    submap = dict()
+    submap: dict[str, str] = dict()
     for i, (subj, ctmfile) in enumerate(ctms.items()):
         oldpath, fname = os.path.split(ctmfile)
         fname, ext = os.path.splitext(fname)
@@ -254,7 +297,7 @@ def make_static(
     tpl = loader.load(templatefile)
 
     # Put together all view options
-    my_viewopts = dict(options.config.items("webgl_viewopts"))
+    my_viewopts: dict[str, Any] = dict(options.config.items("webgl_viewopts"))
     my_viewopts["overlays_visible"] = overlays_visible
     my_viewopts["labels_visible"] = labels_visible
     my_viewopts["brightness"] = (
@@ -310,10 +353,10 @@ def show(
     pickerfun: Optional[Callable[[tuple[int, int, int], int, str], None]]=None,
     recache: bool=False,
     template: str="mixer.html",
-    overlays_available: Optional[tuple[str, ...]]=None,
-    overlays_visible: Optional[tuple[str, ...]]=("rois", "sulci"),
-    labels_visible: Optional[tuple[str, ...]]=("rois",),
-    types: Optional[tuple[str, ...]]=("inflated",),
+    overlays_available: Optional[Sequence[str]]=None,
+    overlays_visible: Optional[Sequence[str]]=("rois", "sulci"),
+    labels_visible: Optional[Sequence[str]]=("rois",),
+    types: Sequence[str]=("inflated",),
     overlay_file: Optional[str]=None,
     curvature_brightness: Optional[float]=None,
     curvature_contrast: Optional[float]=None,
@@ -450,7 +493,8 @@ def show(
     db.auxfile = None
 
 
-    linear = lambda x, y, m: (1.-m)*x + m*y
+    # The three mixing functions for animation interpolation. These are used in `makeMovie`` in the JSMixer class below.
+    linear: Callable[[npt.NDArray[np.floating], npt.NDArray[np.floating], float], npt.NDArray[np.floating]] = lambda x, y, m: (1.-m)*x + m*y
     mixes = dict(
         linear=linear,
         smoothstep=(lambda x, y, m: linear(x, y, 3*m**2 - 2*m**3)),
@@ -817,8 +861,8 @@ def show(
             Proxy = serve.JSProxy(self.send, "window.viewer.getImage")
             return Proxy(size[0], size[1], "mixer.html")
 
-        def makeMovie(self, animation, filename="brainmovie%07d.png", offset=0,
-                      fps=30, size=(1920, 1080), interpolation="linear"):
+        def makeMovie(self, animation: list[dict], filename: str="brainmovie%07d.png", offset: int=0,
+                      fps: int=30, size: tuple[int, int]=(1920, 1080), interpolation: Literal["linear", "smoothstep", "smootherstep"]="linear"):
             """Renders movie frames for animation of mesh movement
 
             Makes an animation (for example, a transition between inflated and
@@ -901,7 +945,7 @@ def show(
                             setfunc(start['state'], val)
                 self.getImage(filename%(i+offset), size=size)
 
-        def _get_anim_seq(self, keyframes, fps=30, interpolation='linear'):
+        def _get_anim_seq(self, keyframes: list[AnimationKeyframe], fps: int=30, interpolation: Literal['linear', 'smoothstep', 'smootherstep']='linear'):
             """Convert a list of keyframes to a list of EVERY frame in an animation.
 
             Utility function called by make_movie; separated out so that individual
@@ -922,20 +966,20 @@ def show(
                 t = keyframes[k]['time']
                 t = np.round(t/fs)*fs
                 keyframes[k]['time'] = t
-            allframes = []
+            allframes: list[AnimationKeyframe] = []
             for start, end in zip(keyframes[:-1], keyframes[1:]):
                 t0 = start['time']
                 t1 = end['time']
                 tdif = float(t1-t0)
                 # Check whether to continue frame sequence to endpoint
                 use_endpoint = keyframes[-1]==end
-                nvalues = np.round(tdif/fs).astype(int)
+                nvalues: int = np.round(tdif/fs).astype(int)
                 if use_endpoint:
                     nvalues += 1
                 fr_time = np.linspace(0, 1, nvalues, endpoint=use_endpoint)
                 # Interpolate between values
                 for t in fr_time:
-                    frame = {}
+                    frame: AnimationKeyframe = {} # type: ignore
                     for prop in start.keys():
                         if prop=='time':
                             continue
@@ -950,9 +994,9 @@ def show(
                     allframes.append(frame)
             return allframes
 
-        def make_movie_views(self, animation, filename="brainmovie%07d.png", 
-            offset=0, fps=30, size=(1920, 1080), alpha=1, frame_sleep=0.05,
-            frame_start=0, interpolation="linear"):
+        def make_movie_views(self, animation: list[AnimationKeyframe], filename: str="brainmovie%07d.png",
+            offset: int=0, fps: int=30, size: tuple[int, int]=(1920, 1080), alpha: float=1, frame_sleep: float=0.05,
+            frame_start: int=0, interpolation: Literal['linear', 'smoothstep', 'smootherstep']="linear"):
             """Renders movie frames for animation of mesh movement
 
             Makes an animation (for example, a transition between inflated and

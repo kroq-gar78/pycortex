@@ -82,6 +82,7 @@ class NPEncode(json.JSONEncoder):
             return super(NPEncode, self).default(obj)
 
 
+# TODO: unused, remove this
 class StaticFileHandler(tornado.web.RequestHandler):
     """A simple handler that can serve static content from a directory.
 
@@ -473,6 +474,7 @@ class JSProxy(Generic[P]):
 
     def __setattr__(self, attr: str, value: Any):
         if hasattr(self, "attrs") and self.attrs is None:
+            # TODO: does this ever happen??
             return super(JSProxy, self).__setattr__(attr, value)
         if not hasattr(self, "attrs") or attr not in self.attrs:
             return super(JSProxy, self).__setattr__(attr, value)
