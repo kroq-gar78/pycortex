@@ -201,7 +201,8 @@ def add_rois(fig: Axes, dataview: dataset.Dataview, extents: Optional[tuple[floa
         Height of image. None defaults to height of images already present in figure.
     with_labels : bool
         Whether to display text labels on ROIs
-    roi_list :
+    roi_list : list of str, optional
+        List of ROIs to include
 
     shadow : float, optional
         Standard deviation of the gaussian shadow. Set to 0 if you want no shadow.
@@ -248,7 +249,7 @@ def add_sulci(fig: Axes, dataview: dataset.Dataview, extents: Optional[tuple[flo
         Height of image. None defaults to height of images already present in figure.
     with_labels : bool
         Whether to display text labels for sulci
-    sulci_list : list
+    sulci_list : list[str]
         List of sulci to include
     shadow : float, optional
         Standard deviation of the gaussian shadow. Set to 0 if you want no shadow.
@@ -413,7 +414,7 @@ def add_custom(fig: Axes, dataview: dataset.Dataview, svgfile: str, layer: str, 
         Height of image. if None, defaults to height of images already present in figure.
     with_labels : bool
         Whether to display text labels on ROIs
-    shape_list : list
+    shape_list : list of str, optional
         list of paths/shapes within svg layer to render, if only a subset of
         the paths/shapes within the layer are desired.
     shadow : float, optional
