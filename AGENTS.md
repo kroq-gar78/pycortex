@@ -51,7 +51,7 @@ Two orthogonal mixin axes: **braindata** (the array plus subject/transform ident
 
 ### Volume ↔ surface mapping — `cortex/mapper/`
 
-`get_mapper(subject, xfmname, type=...)` builds per-hemisphere sparse matrices (point/line/patch sampling families × nearest/trilinear/gaussian/lanczos kernels) and caches them in the subject's `cache/` dir. `Mapper.__call__` maps volume→vertex; `.backwards` goes the other way. Cache invalidation is mtime-based against the `.xfm` file only — editing surfaces does not invalidate it; `db.clear_cache(subject)` is the escape hatch.
+`get_mapper(subject, xfmname, maptype=...)` builds per-hemisphere sparse matrices (point/line/patch sampling families × nearest/trilinear/gaussian/lanczos kernels) and caches them in the subject's `cache/` dir. `Mapper.__call__` maps volume→vertex; `.backwards` goes the other way. Cache invalidation is mtime-based against the `.xfm` file only — editing surfaces does not invalidate it; `db.clear_cache(subject)` is the escape hatch.
 
 `cortex/xfm.py` (`Transform`) handles the affine conventions, including `from_fsl`/`to_fsl` and `from_freesurfer`/`to_freesurfer` conversions.
 
